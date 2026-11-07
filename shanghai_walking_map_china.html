@@ -147,7 +147,10 @@
   .nl-dot {
     flex: 0 0 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 13px;
   }
-  .nl-name { flex: 1; min-width: 0; cursor: pointer; }
+  .nl-name {
+    flex: 1; min-width: 0; cursor: pointer; border: 0; background: none; padding: 0;
+    text-align: start; color: inherit; font: inherit;
+  }
   .nl-name div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
   .nl-name small { color: var(--muted); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .nl-dist { font-size: 12px; font-weight: 700; text-align: right; white-space: nowrap; }
@@ -188,6 +191,27 @@
   .pin.photo { background: var(--photo); }
   .pin.food { background: var(--food); }
   .pin.hotel { background: var(--hotel); }
+  /* The pin whose details are open: larger, with a ring, so you can see which one you tapped. */
+  .pin.selected { scale: 1.3; box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--focus), 0 3px 8px rgba(0,0,0,.35); }
+
+  /* ---------- Spot sheet (phones): details slide up from the bottom instead of a popup ---------- */
+  #sheet {
+    position: fixed; z-index: 1150; left: 0; right: 0; bottom: 0;
+    background: #ffffff; color: #0f172a;
+    border-radius: 20px 20px 0 0; box-shadow: 0 -8px 32px rgba(15, 23, 42, 0.25);
+    max-height: 58dvh; overflow-y: auto; overscroll-behavior: contain;
+    padding: 0 max(16px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 16px) max(16px, env(safe-area-inset-left, 0px));
+  }
+  .sheet-top {
+    position: sticky; top: 0; z-index: 1; background: #ffffff;
+    display: flex; justify-content: center; padding: 8px 0 6px;
+  }
+  .sheet-grip { width: 40px; height: 5px; border-radius: 999px; background: #cbd5e1; }
+  #sheetClose {
+    position: absolute; right: 0; top: 6px; width: 44px; height: 44px; border: 0; border-radius: 999px;
+    background: #f1f5f9; color: #0f172a; font-size: 16px;
+  }
+  #sheet .pp h3 { font-size: 17px; padding-right: 52px; }
 
   /* ---------- Popup ---------- */
   .leaflet-popup-content-wrapper { border-radius: 16px; }
@@ -257,7 +281,10 @@
     .icon-btn, #drToggle .caret { transition: transform 200ms ease-out; }
     .chip, .pill-btn, .nl-copy, .pp .btn { transition: scale 150ms ease-out; }
     .chip:active, .pill-btn:active, .nl-copy:active, .pp .btn:active { scale: 0.96; }
+    .pin { transition: scale 150ms ease-out; }
+    #sheet { animation: sheet-in 220ms ease-out both; }
   }
+  @keyframes sheet-in { from { transform: translateY(24px); opacity: 0; } }
 </style>
 </head>
 <body>
@@ -295,6 +322,13 @@
     <div id="nearNote" class="note"></div>
     <ol id="nearList"></ol>
   </div>
+</section>
+<section id="sheet" hidden aria-label="Spot details">
+  <div class="sheet-top">
+    <span class="sheet-grip" aria-hidden="true"></span>
+    <button id="sheetClose" type="button" aria-label="Close details">✕</button>
+  </div>
+  <div id="sheetBody"></div>
 </section>
 <div id="toast" role="status" aria-live="polite"></div>
 
@@ -867,13 +901,64 @@ const markers = {};
 const markerLayer = L.layerGroup().addTo(map);
 ALL.forEach(s => {
   const m = L.marker([s.pos.lat, s.pos.lng], { icon: makeIcon(s), title: s.en, riseOnHover: true });
-  m.bindPopup(() => popupEl(s), {
-    autoPanPaddingTopLeft: L.point(16, 170),
-    autoPanPaddingBottomRight: L.point(16, 140),
-    maxWidth: 300
-  });
+  m.on("click", () => selectSpot(s));
   markers[s.id] = m;
 });
+
+/* =====================================================================
+   SPOT DETAILS: a bottom sheet on phones, a popup on larger screens
+   ===================================================================== */
+const isPhone = () => window.matchMedia("(max-width: 640px)").matches;
+const reduceMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+let selectedId = null;
+
+function markSelected(id) {
+  if (selectedId) markers[selectedId].getElement()?.querySelector(".pin")?.classList.remove("selected");
+  selectedId = id;
+  if (id) markers[id].getElement()?.querySelector(".pin")?.classList.add("selected");
+}
+
+function selectSpot(s) {
+  const at = L.latLng(s.pos.lat, s.pos.lng);
+  if (!isPhone()) {
+    map.setView(at, Math.max(map.getZoom(), 16), { animate: !reduceMotion() });
+    L.popup({ maxWidth: 300, offset: L.point(0, -24), autoPanPadding: L.point(24, 24) })
+      .setLatLng(at).setContent(popupEl(s)).openOn(map);
+    return;
+  }
+  setToolbar(false);
+  document.getElementById("drawer").hidden = true;
+  const sheet = document.getElementById("sheet");
+  document.getElementById("sheetBody").replaceChildren(popupEl(s));
+  sheet.hidden = false;
+  sheet.scrollTop = 0;
+  markSelected(s.id);
+  // One smooth move: put the pin in the middle of the map area left above the sheet.
+  const zoom = Math.max(map.getZoom(), 15);
+  const target = map.unproject(map.project(at, zoom).add([0, sheet.offsetHeight / 2]), zoom);
+  map.setView(target, zoom, { animate: !reduceMotion(), duration: 0.35 });
+}
+
+function closeSheet() {
+  const sheet = document.getElementById("sheet");
+  if (sheet.hidden) return false;
+  sheet.hidden = true;
+  document.getElementById("drawer").hidden = false;
+  markSelected(null);
+  return true;
+}
+
+document.getElementById("sheetClose").addEventListener("click", closeSheet);
+// Swipe down from the top of the sheet to close it.
+(() => {
+  const sheet = document.getElementById("sheet");
+  let startY = null;
+  sheet.addEventListener("touchstart", e => { startY = sheet.scrollTop <= 0 ? e.touches[0].clientY : null; }, { passive: true });
+  sheet.addEventListener("touchend", e => {
+    if (startY !== null && e.changedTouches[0].clientY - startY > 60) closeSheet();
+    startY = null;
+  }, { passive: true });
+})();
 
 /* =====================================================================
    FILTERS
@@ -983,13 +1068,10 @@ function renderNearby() {
     const li = document.createElement("li");
     li.innerHTML = `
       <span class="nl-dot" style="background:var(--${s.cat})">${EMOJI[s.cat]}</span>
-      <span class="nl-name"><div>${esc(s.en)}</div><small>${esc(s.zh)} · D${s.day}</small></span>
+      <button class="nl-name" type="button"><div>${esc(s.en)}</div><small>${esc(s.zh)} · D${s.day}</small></button>
       <span class="nl-dist">${fmtDist(d)}${state.me ? `<small>~${walkMins(d)} min</small>` : ""}</span>
       <button class="nl-copy" type="button" aria-label="Copy Chinese name">📋</button>`;
-    li.querySelector(".nl-name").addEventListener("click", () => {
-      map.setView([s.pos.lat, s.pos.lng], Math.max(map.getZoom(), 16));
-      markers[s.id].openPopup();
-    });
+    li.querySelector(".nl-name").addEventListener("click", () => selectSpot(s));
     li.querySelector(".nl-copy").addEventListener("click", () => copyText(s.q, "name"));
     list.appendChild(li);
   });
@@ -1113,6 +1195,7 @@ window.addEventListener("resize", markOverflowingChips);
 // Escape closes an open popup first, then any open panel.
 document.addEventListener("keydown", e => {
   if (e.key !== "Escape") return;
+  if (closeSheet()) return;
   if (map.getContainer().querySelector(".leaflet-popup")) return;
   setToolbar(false);
   setDrawer(false);
@@ -1125,6 +1208,7 @@ document.getElementById("tbSummary").addEventListener("click", () => setToolbar(
 // On phones, tapping the map tucks both panels away so the map is usable.
 map.on("click", () => {
   if (window.innerWidth > 640) return;
+  if (closeSheet()) return;
   setToolbar(false);
   setDrawer(false);
 });
