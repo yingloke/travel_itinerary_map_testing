@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<title>Shanghai Walking Map · China</title>
+<!-- jsDelivr first; unpkg as a fallback if it is blocked. -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"
+      onerror="this.onerror=null;this.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'">
+<style>
+  :root {
+    --glass-bg: rgba(255, 255, 255, 0.74);
+    --glass-border: rgba(255, 255, 255, 0.65);
+    --glass-shadow: 0 8px 32px rgba(15, 23, 42, 0.18);
+    --text: #0f172a;
+    --muted: #64748b;
+    --chip-bg: rgba(15, 23, 42, 0.06);
+    --chip-active-bg: #0f172a;
+    --chip-active-text: #ffffff;
+    --photo: #2563eb;
+    --food: #ea580c;
+    --hotel: #059669;
+    --route: #7c3aed;
+    --danger: #dc2626;
+    --ok: #15803d;
+    --focus: #1d4ed8;
+    --tb-h: 120px;
+    --dr-h: 64px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --glass-bg: rgba(15, 23, 42, 0.72);
+      --glass-border: rgba(148, 163, 184, 0.25);
+      --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --chip-bg: rgba(241, 245, 249, 0.1);
+      --chip-active-bg: #f1f5f9;
+      --chip-active-text: #0f172a;
+      --focus: #93c5fd;
+    }
+  }
+  html, body {
+    height: 100dvh; width: 100%; margin: 0; padding: 0; overflow: hidden;
+    background: #e5e7eb;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Roboto, sans-serif;
+    color: var(--text);
+    -webkit-tap-highlight-color: transparent;
+  }
+  #map { height: 100dvh; width: 100%; margin: 0; padding: 0; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  /* ---------- Glass panels ---------- */
+  .glass {
+    position: fixed; z-index: 1100;
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(16px) saturate(170%);
+    backdrop-filter: blur(16px) saturate(170%);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    border-radius: 18px;
+    color: var(--text);
+  }
+  button { font: inherit; color: inherit; cursor: pointer; }
+
+  #toolbar {
+    top: calc(env(safe-area-inset-top, 0px) + 12px);
+    left: calc(env(safe-area-inset-left, 0px) + 12px);
+    width: 380px; max-width: calc(100vw - 24px);
+    padding: 12px 12px 10px;
+    box-sizing: border-box;
+  }
+  .tb-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .brand strong { display: block; font-size: 15px; letter-spacing: -0.01em; }
+  .brand span { font-size: 12px; color: var(--muted); }
+  .icon-btn {
+    border: 0; background: var(--chip-bg); border-radius: 999px;
+    width: 34px; height: 34px; display: grid; place-items: center; font-size: 15px;
+  }
+  #toolbar.collapsed #tbBody { display: none; }
+  #toolbar.collapsed #tbToggle { transform: rotate(180deg); }
+
+  .chips {
+    display: flex; gap: 6px; overflow-x: auto; padding: 8px 0 2px;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain;
+  }
+  /* Fade the trailing edge so a row that scrolls sideways shows there is more. */
+  .chips.overflows {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip {
+    flex: 0 0 auto; border: 0; background: var(--chip-bg); border-radius: 999px;
+    padding: 6px 11px; font-size: 13px; line-height: 1.2; white-space: nowrap;
+  }
+  .chip small { display: block; font-size: 10px; color: var(--muted); }
+  .chip.active { background: var(--chip-active-bg); color: var(--chip-active-text); }
+  .chip.active small { color: inherit; opacity: .75; }
+
+  #dayInfo {
+    margin-top: 8px; font-size: 12.5px; color: var(--muted);
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+  #dayInfo b { color: var(--text); font-weight: 600; }
+  .pill-btn {
+    border: 0; border-radius: 999px; padding: 7px 12px; font-size: 12.5px; font-weight: 600;
+    background: var(--route); color: #fff; white-space: nowrap;
+  }
+  .pill-btn.ghost { background: var(--chip-bg); color: var(--text); }
+  .pill-btn.danger { background: transparent; color: var(--danger); padding: 7px 8px; }
+  .legend { display: flex; gap: 10px; font-size: 11.5px; color: var(--muted); margin-top: 8px; flex-wrap: wrap; }
+  .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
+
+  /* ---------- Nearby panel ---------- */
+  #drawer {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+    left: calc(env(safe-area-inset-left, 0px) + 12px);
+    width: 380px; max-width: calc(100vw - 24px);
+    box-sizing: border-box; padding: 10px 12px;
+  }
+  .dr-head { display: flex; align-items: center; gap: 8px; }
+  #drToggle {
+    border: 0; background: none; padding: 4px 0; font-weight: 700; font-size: 14px;
+    display: flex; align-items: center; gap: 6px; min-width: 0;
+  }
+  #drToggle .caret { font-size: 11px; color: var(--muted); }
+  #drawer.collapsed #drToggle .caret { transform: rotate(180deg); }
+  .badge {
+    margin-left: auto; font-size: 12px; font-weight: 600; padding: 5px 9px; border-radius: 999px;
+    background: var(--chip-bg); color: var(--muted); white-space: nowrap;
+  }
+  .badge.ok { background: rgba(14, 165, 233, 0.15); color: #0284c7; }
+  .badge.err { background: rgba(220, 38, 38, 0.12); color: var(--danger); }
+  .badge.busy { opacity: .7; }
+  #locBtn { background: #0ea5e9; }
+  #drBody { margin-top: 4px; }
+  #drawer.collapsed #drBody { display: none; }
+  .note { font-size: 11.5px; color: var(--muted); padding: 2px 0 4px; }
+  #nearList { list-style: none; margin: 0; padding: 0; max-height: 34dvh; overflow-y: auto; overscroll-behavior: contain; }
+  #nearList li {
+    display: flex; align-items: center; gap: 8px; padding: 7px 0;
+    border-top: 1px solid var(--chip-bg); font-size: 13px;
+  }
+  #nearList li:first-child { border-top: 0; }
+  .nl-dot {
+    flex: 0 0 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 13px;
+  }
+  .nl-name { flex: 1; min-width: 0; cursor: pointer; }
+  .nl-name div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+  .nl-name small { color: var(--muted); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nl-dist { font-size: 12px; font-weight: 700; text-align: right; white-space: nowrap; }
+  .nl-dist small { display: block; font-weight: 500; color: var(--muted); }
+  .nl-copy { border: 0; background: var(--chip-bg); border-radius: 8px; width: 32px; height: 32px; font-size: 14px; }
+  .empty { font-size: 12.5px; color: var(--muted); padding: 6px 0; }
+
+  /* ---------- Live location ---------- */
+  .me-wrap { background: none; border: 0; }
+  .me-dot {
+    width: 16px; height: 16px; margin: 3px; border-radius: 50%; background: #0ea5e9; border: 3px solid #fff;
+    box-sizing: border-box; animation: me-pulse 2s infinite;
+  }
+  @keyframes me-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(14, 165, 233, 0.55); }
+    70% { box-shadow: 0 0 0 14px rgba(14, 165, 233, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(14, 165, 233, 0); }
+  }
+
+  /* ---------- Toast ---------- */
+  #toast {
+    position: fixed; z-index: 1300; left: 50%; transform: translateX(-50%);
+    top: calc(env(safe-area-inset-top, 0px) + 16px); max-width: calc(100vw - 32px);
+    background: #0f172a; color: #fff; padding: 9px 14px; border-radius: 999px; font-size: 13px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.3); opacity: 0; transition: opacity .2s; pointer-events: none;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #toast.show { opacity: 1; }
+
+  /* ---------- Pins ---------- */
+  .pin-wrap { background: none; border: 0; }
+  .pin {
+    width: 30px; height: 30px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
+    display: grid; place-items: center; border: 2px solid #fff; box-shadow: 0 3px 8px rgba(0,0,0,.35);
+    position: relative;
+  }
+  .pin span { transform: rotate(45deg); font-size: 14px; line-height: 1; }
+  .pin.photo { background: var(--photo); }
+  .pin.food { background: var(--food); }
+  .pin.hotel { background: var(--hotel); }
+
+  /* ---------- Popup ---------- */
+  .leaflet-popup-content-wrapper { border-radius: 16px; }
+  .leaflet-popup-content { margin: 14px 16px; width: 260px !important; max-width: calc(100vw - 80px); }
+  .pp h3 { margin: 0; font-size: 15px; line-height: 1.3; color: #0f172a; }
+  .pp .zh { font-size: 15px; color: #334155; margin: 2px 0 8px; font-weight: 600; }
+  .pp .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .pp .tag { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px; }
+  .pp .tag.photo { background: rgba(37, 99, 235, .12); color: var(--photo); }
+  .pp .tag.food { background: rgba(234, 88, 12, .12); color: var(--food); }
+  .pp .tag.hotel { background: rgba(5, 150, 105, .12); color: var(--hotel); }
+  .pp .tag.time { background: #f1f5f9; color: #334155; }
+  .pp .tag.rn { background: #fee2e2; color: #b91c1c; }
+  .pp .zh, .pp .row { -webkit-user-select: text; user-select: text; }
+  .pp .why {
+    font-size: 13px; line-height: 1.45; color: #1e293b; background: #f8fafc;
+    border-left: 3px solid #f59e0b; border-radius: 6px; padding: 7px 9px; margin-bottom: 8px;
+  }
+  .pp .why b { display: block; font-size: 11px; color: #b45309; letter-spacing: .02em; margin-bottom: 2px; }
+  .pp .row { font-size: 12.5px; color: #475569; margin-bottom: 4px; }
+  .pp .row.dist { color: #0284c7; font-weight: 600; }
+  .pp .warn { font-size: 12px; color: #b45309; background: #fffbeb; border-radius: 8px; padding: 6px 8px; margin: 6px 0 8px; }
+  .pp .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
+  .pp .btn {
+    display: block; text-align: center; border: 0; border-radius: 10px; padding: 9px 6px;
+    font-size: 12.5px; font-weight: 700; text-decoration: none;
+  }
+  .pp .btn.copy { background: #f1f5f9; color: #0f172a; }
+  .pp .btn.copy:only-of-type { grid-column: span 2; }
+  .pp .btn.apple { background: #0f172a; color: #fff !important; }
+  .pp .btn.amap { background: #1677ff; color: #fff !important; }
+
+  /* ---------- Leaflet controls under the toolbar on phones ---------- */
+  #tbSummary {
+    display: none; border: 0; background: none; padding: 0; text-align: start;
+    font-size: 12px; color: var(--muted);
+  }
+  @media (max-width: 640px) {
+    #toolbar, #drawer { width: auto; right: calc(env(safe-area-inset-right, 0px) + 10px); left: calc(env(safe-area-inset-left, 0px) + 10px); max-width: none; }
+    #toolbar { top: calc(env(safe-area-inset-top, 0px) + 10px); padding: 8px 10px; border-radius: 14px; }
+    /* Collapsed: a small pill at top-left that leaves the map and zoom buttons clear. */
+    #toolbar.collapsed { right: auto; max-width: calc(100vw - 84px); }
+    #toolbar.collapsed .brand span { display: none; }
+    #toolbar.collapsed #tbSummary { display: block; }
+    .brand strong { font-size: 14px; }
+    .icon-btn { width: 30px; height: 30px; flex: 0 0 auto; }
+    #drawer { bottom: calc(env(safe-area-inset-bottom, 0px) + 10px); padding: 8px 10px; border-radius: 14px; }
+    #drToggle { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .badge:not(.ok):not(.err):not(.busy) { display: none; }
+    #locBtn { padding: 6px 10px; font-size: 12px; }
+    #nearList { max-height: 26dvh; }
+    .note { display: none; }
+    .leaflet-top.leaflet-right { margin-top: calc(var(--tb-h) + 16px); }
+    .leaflet-bottom.leaflet-right { margin-bottom: calc(var(--dr-h) + 14px); }
+  }
+
+  /* ---------- Touch: 44px tap targets ---------- */
+  @media (pointer: coarse) {
+    .chip, .pill-btn, #drToggle { min-height: 44px; }
+    .icon-btn, .nl-copy { width: 44px; height: 44px; }
+    .pp .btn { min-height: 44px; display: grid; place-items: center; }
+    #tbSummary { min-height: 32px; }
+  }
+
+  /* ---------- Motion, only for people who have not asked for less ---------- */
+  @media (prefers-reduced-motion: no-preference) {
+    .icon-btn, #drToggle .caret { transition: transform 200ms ease-out; }
+    .chip, .pill-btn, .nl-copy, .pp .btn { transition: scale 150ms ease-out; }
+    .chip:active, .pill-btn:active, .nl-copy:active, .pp .btn:active { scale: 0.96; }
+  }
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<header id="toolbar" class="glass">
+  <div class="tb-head">
+    <div class="brand">
+      <strong>Shanghai Walking Map · China</strong>
+      <span>21–28 Nov 2026 · photo &amp; food itinerary</span>
+      <button id="tbSummary" type="button"></button>
+    </div>
+    <button id="tbToggle" class="icon-btn" type="button" aria-label="Hide filters" aria-expanded="true">▴</button>
+  </div>
+  <div id="tbBody">
+    <div class="chips" id="dayChips" role="group" aria-label="Day"></div>
+    <div class="chips" id="catChips" role="group" aria-label="Category"></div>
+    <div id="dayInfo"></div>
+    <div class="legend">
+      <span><i style="background:var(--photo)"></i>Photo</span>
+      <span><i style="background:var(--food)"></i>Food</span>
+      <span><i style="background:var(--hotel)"></i>Hotel</span>
+      <span>📕 = RedNote find · pins ±150 m</span>
+    </div>
+  </div>
+</header>
+
+<section id="drawer" class="glass" aria-label="Nearby spots">
+  <div class="dr-head">
+    <button id="drToggle" aria-expanded="true"><span id="drTitle">Nearest to map centre</span><span class="caret">▾</span></button>
+    <span id="badge" class="badge">Location off</span>
+    <button id="locBtn" class="pill-btn">📍 Locate me</button>
+  </div>
+  <div id="drBody">
+    <div id="nearNote" class="note"></div>
+    <ol id="nearList"></ol>
+  </div>
+</section>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>window.L || document.write('<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>');</script>
+<script>
+/* =====================================================================
+   ITINERARY DATA
+   Coordinates: src "wgs" = WGS-84 from OpenStreetMap/Nominatim (exact),
+   src "gcj" = GCJ-02 (China map datum, Amap/Apple Maps China) and
+   This China version plots everything in GCJ-02 to match the Gaode basemap.
+   Apple Maps links use GCJ-02, which is what Apple Maps expects in China.
+   ===================================================================== */
+const DAYS = [
+  { n: 1, date: "Sun 22 Nov", title: "Bund · Old City · Lujiazui sunset" },
+  { n: 2, date: "Mon 23 Nov", title: "Western French Concession" },
+  { n: 3, date: "Tue 24 Nov", title: "Shanghai Disneyland" },
+  { n: 4, date: "Wed 25 Nov", title: "Eastern FFC · shikumen lanes" },
+  { n: 5, date: "Thu 26 Nov", title: "Jing'an · People's Square" },
+  { n: 6, date: "Fri 27 Nov", title: "Hongkou · North Bund sunset" },
+  { n: 7, date: "Sat 28 Nov", title: "Checkout breakfast" }
+];
+
+const HOTEL = {
+  id: "hotel", day: 0, cat: "hotel",
+  en: "Elong Anyue Hotel (North Bund · Pingliang Rd)",
+  zh: "艺龙安悦酒店(上海北外滩平凉路地铁站店)",
+  time: "Your base · 21–28 Nov",
+  tip: "江浦路518号1层, Yangpu. Metro Line 12 from here reaches Intl. Cruise Terminal (North Bund), Tiantong Rd, Nanjing West Rd and Jiashan Rd without changing.",
+  metro: "Pingliang Rd (L12)",
+  lat: 31.2604, lng: 121.5223, src: "wgs",
+  warn: "Pin placed at Pingliang Rd station; the hotel is a short walk away on Jiangpu Rd."
+};
+
+const STOPS = [
+  /* ---------------- Day 1 · Sun 22 Nov ---------------- */
+  { id: "d1-egg", day: 1, cat: "food", rn: true,
+    en: "Dingxing Rd Egg-Pancake Stall", zh: "定兴路蛋饼摊", time: "07:30 · Breakfast",
+    tip: "Classic Shanghai danbing (蛋饼) made to order at 定兴路6号.",
+    metro: "People's Square (L1/2/8)", exit: "Exit 8, ~330 m walk",
+    lat: 31.235390, lng: 121.471582, src: "gcj" },
+  { id: "d1-nanxiang", day: 1, cat: "food",
+    en: "Nanxiang Mantou Dian", zh: "南翔馒头店", time: "08:00 · Breakfast",
+    tip: "Crab meat & pork xiaolongbao (蟹粉鲜肉). Go early, the Yu Garden queue builds by 10:00.",
+    metro: "Yuyuan Garden (L10/14)",
+    lat: 31.2281, lng: 121.4869, src: "wgs" },
+  { id: "d1-yu", day: 1, cat: "photo",
+    en: "Yu Garden", zh: "豫园", time: "08:30 · Morning",
+    tip: "Zigzag bridge (九曲桥) and Huxinting teahouse reflections; tight shots of the up-swept eaves. Opens 08:00.",
+    metro: "Yuyuan Garden (L10/14)",
+    lat: 31.2289274, lng: 121.4879752, src: "wgs" },
+  { id: "d1-bundplat", day: 1, cat: "photo", rn: true,
+    en: "Bund Viewing Platform", zh: "外滩观景台", time: "10:30 · Morning light",
+    tip: "Morning sun lights the Bund facades. Look down 九江路 (Jiujiang Rd): it points straight at the Pearl Tower, a ready-made leading line.",
+    metro: "East Nanjing Rd (L2/10)",
+    lat: 31.2395, lng: 121.4905, src: "gcj" },
+  { id: "d1-beijing", day: 1, cat: "photo", rn: true,
+    en: "East Beijing Road", zh: "北京东路", time: "11:00 · Late morning",
+    tip: "Century-old banks and trading houses at the Bund end. 50–85mm on the Art Deco tops.",
+    metro: "East Nanjing Rd (L2/10)",
+    lat: 31.2424, lng: 121.4880, src: "gcj" },
+  { id: "d1-shanxi", day: 1, cat: "food", rn: true,
+    en: "Old-Brand Food Cluster, Shanxi S. Rd", zh: "山西南路老字号", time: "12:00 · Lunch",
+    tip: "Former Yunnan Rd brands reopened here in Feb 2026: 小绍兴 白斩鸡 · 小金陵 盐水鸭/爆鱼/酱鸭腿 · 洪长兴 牛肉煎包.",
+    metro: "East Nanjing Rd (L2/10)",
+    lat: 31.2335, lng: 121.4830, src: "gcj",
+    warn: "Exact door numbers unverified: search the brand name + 山西南路 in Amap/Dianping." },
+  { id: "d1-dahuchun", day: 1, cat: "food", rn: true,
+    en: "Da Hu Chun (Sichuan Mid. Rd)", zh: "大壶春(四川中路店)", time: "12:00 · Lunch (alt)",
+    tip: "鲜肉生煎: fully-leavened shengjianbao, Michelin-listed. 四川中路136号.",
+    metro: "East Nanjing Rd (L2/10)",
+    lat: 31.2350, lng: 121.4878, src: "gcj" },
+  { id: "d1-shendacheng", day: 1, cat: "food", rn: true,
+    en: "Shen Da Cheng", zh: "沈大成", time: "14:00 · Snack",
+    tip: "双酿团 (double-filled glutinous rice balls). 绿豆刨冰 if the day is warm.",
+    metro: "East Nanjing Rd (L2/10)",
+    lat: 31.2365, lng: 121.4790, src: "gcj" },
+  { id: "d1-dongchang", day: 1, cat: "photo", rn: true,
+    en: "Dongchang Rd Skybridge", zh: "东昌路天桥", time: "15:00 · Afternoon",
+    tip: "Walk west from the station, cross Pudong S. Rd and Lujiazui Ring Rd onto the long footbridge: SWFC, Jin Mao and Shanghai Tower side by side. Shoot vertical.",
+    metro: "Dongchang Rd (L2)",
+    lat: 31.2350, lng: 121.5085, src: "gcj" },
+  { id: "d1-sht", day: 1, cat: "photo",
+    en: "Shanghai Tower (observatory, optional)", zh: "上海中心大厦", time: "15:45 · Before sunset",
+    tip: "Lens flat against the glass and dark clothing to kill reflections.",
+    metro: "Lujiazui (L2/14)",
+    lat: 31.2335, lng: 121.5056, src: "gcj" },
+  { id: "d1-binjiang", day: 1, cat: "photo", rn: true,
+    en: "Binjiang Park (Pudong)", zh: "滨江公园", time: "16:30 · Sunset (~16:53)",
+    tip: "RedNote's 'sunset broadcast' spot: face west across the river to the Bund as the sky colours.",
+    metro: "Lujiazui (L2/14)",
+    lat: 31.2410, lng: 121.4960, src: "gcj" },
+  { id: "d1-promenade", day: 1, cat: "photo", rn: true,
+    en: "Lujiazui Riverside Walk", zh: "陆家嘴滨江步道", time: "17:00 · Blue hour",
+    tip: "The lit Bund across the water. Brace on the railing for 2–8 s exposures.",
+    metro: "Lujiazui (L2/14)",
+    lat: 31.2372, lng: 121.4975, src: "gcj" },
+  { id: "d1-xinya", day: 1, cat: "food", rn: true,
+    en: "Xinya Restaurant", zh: "新雅粤菜馆", time: "19:00 · Dinner",
+    tip: "走油肉 · 狮子头 · 糖醋小排 · 乳腐肉. 南京东路719号.",
+    metro: "East Nanjing Rd (L2/10)",
+    lat: 31.2363, lng: 121.4770, src: "gcj" },
+  { id: "d1-lailai", day: 1, cat: "food",
+    en: "Lai Lai Xiao Long (dinner alt)", zh: "莱莱小笼", time: "19:00 · Dinner (alt)",
+    tip: "蟹膏鲜肉 xiaolongbao and 蟹粉小馄饨, on Tianjin Rd just off Nanjing E. Rd.",
+    metro: "East Nanjing Rd (L2/10)",
+    lat: 31.2393, lng: 121.4810, src: "gcj" },
+
+  /* ---------------- Day 2 · Mon 23 Nov ---------------- */
+  { id: "d2-wukang", day: 2, cat: "photo", rn: true,
+    en: "Wukang Mansion", zh: "武康大楼", time: "07:00 · 7–9 AM",
+    tip: "Shoot the wedge-shaped 'ship's bow' from across the five-way junction. Late-Nov plane trees should be gold.",
+    metro: "Jiaotong University (L10/11)",
+    lat: 31.2062561, lng: 121.4337292, src: "wgs" },
+  { id: "d2-ops", day: 2, cat: "food", rn: true,
+    en: "Ops Cafe", zh: "OPS咖啡(太原路177弄1号)", time: "08:45 · Coffee",
+    tip: "Standing-only coffee lab with seasonal experimental drinks, from ~¥38. Queues up to 60 min, so go early.",
+    metro: "Jiashan Rd (L9/12) or Zhaojiabang Rd, ~12 min walk",
+    lat: 31.2045, lng: 121.4505, src: "gcj" },
+  { id: "d2-hengshan", day: 2, cat: "photo", rn: true,
+    en: "Hengshan & Taiyuan Roads", zh: "衡山路·太原路", time: "09:45 · Morning",
+    tip: "Garden villas and pavements carpeted with plane-tree leaves; Taiyuan Rd is the quieter of the two.",
+    metro: "Hengshan Rd (L1)",
+    lat: 31.2045, lng: 121.4460, src: "gcj" },
+  { id: "d2-sunflour", day: 2, cat: "food", rn: true,
+    en: "Sunflour Bakery", zh: "Sunflour(安福路店)", time: "11:00 · Brunch",
+    tip: "European bakery at the Anfu/Wukang corner: 小太阳 and chocolate puffs; set lunch at midday. 安福路308号.",
+    metro: "Changshu Rd (L1/7)",
+    lat: 31.2105, lng: 121.4405, src: "gcj" },
+  { id: "d2-ferguson", day: 2, cat: "photo",
+    en: "Wukang Rd & Ferguson Lane", zh: "武康路·武康庭", time: "11:45 · Late morning",
+    tip: "Villa gates, tree tunnels and heritage plaques; Ferguson Lane is at 376号. Shoot from the pavement: these are homes.",
+    metro: "Shanghai Library (L10)", exit: "Exit 1, then walk south on Wukang Rd",
+    lat: 31.2085, lng: 121.4385, src: "gcj" },
+  { id: "d2-anfu", day: 2, cat: "photo", rn: true,
+    en: "Anfu Road", zh: "安福路", time: "12:30 · Midday",
+    tip: "Street portraits and shopfronts under the plane trees.",
+    metro: "Changshu Rd (L1/7)",
+    lat: 31.2115, lng: 121.4430, src: "gcj" },
+  { id: "d2-icy", day: 2, cat: "food", rn: true,
+    en: "ICY Gelato (Fuxing W. Rd villa)", zh: "ICY Gelato(复兴西路洋房店)", time: "13:00 · Dessert",
+    tip: "Italian-style gelato in an old garden house at 乌鲁木齐中路276号.",
+    metro: "Changshu Rd (L1/7)", exit: "Exit 8, ~400 m walk",
+    lat: 31.2105, lng: 121.4490, src: "gcj" },
+  { id: "d2-xinle", day: 2, cat: "photo", rn: true,
+    en: "Xinle Road", zh: "新乐路", time: "13:30 · Afternoon",
+    tip: "The blue onion domes of the old Russian Orthodox church against plane trees; small boutiques.",
+    metro: "Changshu Rd (L1/7)",
+    lat: 31.2160, lng: 121.4480, src: "gcj" },
+  { id: "d2-kooriya", day: 2, cat: "food", rn: true,
+    en: "Kooriya Shark", zh: "鲨鱼冰屋 Kooriya Shark(常熟路店)", time: "14:00 · Dessert",
+    tip: "Small, cosy Japanese kakigori bar: 西柚刨冰 (grapefruit) and 焦糖海盐刨冰 (salted caramel). 常熟路185号, near Huaihai Rd.",
+    metro: "Changshu Rd (L1/7), ~4 min walk",
+    lat: 31.2135, lng: 121.4520, src: "gcj" },
+  { id: "d2-xinhua", day: 2, cat: "photo", rn: true,
+    en: "Xinhua Road", zh: "新华路", time: "14:45 · Golden hour",
+    tip: "1930s villas behind hedges on the 'garden villa' road; low sun through the trees from ~15:30.",
+    metro: "Jiaotong University (L10/11)",
+    lat: 31.2040, lng: 121.4260, src: "gcj" },
+  { id: "d2-panyu", day: 2, cat: "photo", rn: true,
+    en: "Panyu Rd & Columbia Circle", zh: "番禺路·上生新所", time: "15:45 · Golden hour",
+    tip: "RedNote spelt it 潘禺路. 上生·新所 has the 1920s Columbia Country Club pool and villa: warm light on the arcades.",
+    metro: "Jiaotong University (L10/11), ~15 min walk",
+    lat: 31.2105, lng: 121.4275, src: "gcj",
+    warn: "Columbia Circle pairing is from Claude's own knowledge, not a fetched source." },
+  { id: "d2-jesse", day: 2, cat: "food", rn: true,
+    en: "Old Jesse", zh: "老吉士酒家(天平路店)", time: "18:00 · Dinner, book ahead",
+    tip: "红烧肉 · 葱油拌面 · 葱烤鱼头 (must be pre-ordered) · 蟹粉拌饭 in crab season. 天平路41号.",
+    metro: "Jiaotong University (L10/11)",
+    lat: 31.2052, lng: 121.4347, src: "wgs" },
+
+  /* ---------------- Day 3 · Tue 24 Nov ---------------- */
+  { id: "d3-disney", day: 3, cat: "photo", rn: true,
+    en: "Shanghai Disneyland", zh: "上海迪士尼乐园", time: "All day · castle at blue hour",
+    tip: "Weekday visit. Book tickets and Premier Access in the official app; castle at ~17:00 blue hour, fireworks with a wide lens.",
+    metro: "Disney Resort (L11)",
+    lat: 31.1440, lng: 121.6570, src: "gcj",
+    warn: "November opening hours and fireworks schedule not verified: check the app." },
+  { id: "d3-ahma", day: 3, cat: "food", rn: true,
+    en: "Ah Ma Handmade (Disneytown)", zh: "阿嬷手作(迪士尼小镇)", time: "10:00–22:00 · Drink",
+    tip: "Guangxi-style made-to-order tea drinks with rice mochi. Disneytown is outside the park gates, so it works after the fireworks too. Also at IFC Lujiazui (Day 1).",
+    metro: "Disney Resort (L11)",
+    lat: 31.1430, lng: 121.6625, src: "gcj" },
+
+  /* ---------------- Day 4 · Wed 25 Nov ---------------- */
+  { id: "d4-gmc", day: 4, cat: "food", rn: true,
+    en: "Guangmingcun", zh: "光明邨大酒家", time: "08:30 · Breakfast",
+    tip: "鲜肉月饼 (fresh-pork mooncakes) hot from the oven at the 淮海中路588号 flagship. Expect a queue.",
+    metro: "South Huangpi Rd (L1)",
+    lat: 31.22051, lng: 121.46756, src: "gcj" },
+  { id: "d4-leach", day: 4, cat: "food", rn: true,
+    en: "LEACH Milk Tea (Julu Rd)", zh: "LEACH栗其(巨鹿店)", time: "09:00 · Milk tea",
+    tip: "Milk-tea shop; the favourite is 大红袍珍珠奶茶 (roasted-oolong pearl milk tea). Open 08:30–22:00.",
+    metro: "South Shaanxi Rd (L1/10/12)",
+    lat: 31.2240, lng: 121.4620, src: "gcj",
+    warn: "Street number on Julu Rd not confirmed: pin is approximate, so search 栗其 巨鹿 in Apple Maps." },
+  { id: "d4-sinan", day: 4, cat: "photo", rn: true,
+    en: "Sinan Rd & Sinan Mansions", zh: "思南路·思南公馆", time: "09:30 · Morning",
+    tip: "Ivy-covered garden villas on a quiet plane-tree road; morning side-light on the brick.",
+    metro: "Xintiandi (L10/13)",
+    lat: 31.2160, lng: 121.4690, src: "gcj" },
+  { id: "d4-yongjia", day: 4, cat: "photo", rn: true,
+    en: "Yongjia Road", zh: "永嘉路", time: "11:00 · Late morning",
+    tip: "Lane-house street under a leafy canopy. Frame the lane mouths, not into homes.",
+    metro: "Shaanxi South Rd (L1/10/12)",
+    lat: 31.2105, lng: 121.4570, src: "gcj" },
+  { id: "d4-volcan", day: 4, cat: "food",
+    en: "Café del Volcán", zh: "Café del Volcán(永康路80号)", time: "12:30 · Coffee",
+    tip: "Yunnan pour-over at a tiny, focused bar with about 8 seats.",
+    metro: "Shaanxi South Rd (L1/10/12)",
+    lat: 31.2106, lng: 121.4581, src: "gcj" },
+  { id: "d4-eau", day: 4, cat: "food", rn: true,
+    en: "EAU 2.0 Café", zh: "EAU Cafe(永康路店)", time: "13:00 · Coffee",
+    tip: "The redesigned corner café at 永康路85号 with an outdoor terrace, right across from Café del Volcán.",
+    metro: "Shaanxi South Rd (L1/10/12)", exit: "Exit 7, ~490 m walk",
+    lat: 31.210764, lng: 121.457733, src: "gcj" },
+  { id: "d4-dtx", day: 4, cat: "food", rn: true,
+    en: "Dong Tai Xiang", zh: "东泰祥生煎馆(陕西南路店)", time: "13:30 · Late lunch",
+    tip: "Heritage-listed shengjianbao and 开洋葱油拌面 with dried shrimp, ~¥26 a head. 陕西南路309号.",
+    metro: "Shaanxi South Rd (L1/10/12)",
+    lat: 31.2125, lng: 121.4590, src: "gcj" },
+  { id: "d4-tzf", day: 4, cat: "photo",
+    en: "Tianzifang", zh: "田子坊", time: "15:30 · Golden hour",
+    tip: "Shikumen door frames and laundry poles; shoot low and tight in warm side-light.",
+    metro: "Dapuqiao (L9)",
+    lat: 31.21034, lng: 121.4641036, src: "wgs" },
+  { id: "d4-xtd", day: 4, cat: "photo",
+    en: "Xintiandi & Shikumen Open House", zh: "新天地·屋里厢石库门博物馆", time: "17:00 · Blue hour",
+    tip: "Lit shikumen facades; the museum is a restored 1920s lane-house interior.",
+    metro: "Xintiandi (L10/13)",
+    lat: 31.2195, lng: 121.4740, src: "gcj" },
+  { id: "d4-tamkoko", day: 4, cat: "food", rn: true,
+    en: "TamKoKo Thai Tea Garden (Xintiandi)", zh: "Tamkoko泰柯茶园(上海新天地店)", time: "17:30 · Drink",
+    tip: "Thai milk tea in a tea-garden-style shop.",
+    metro: "Xintiandi (L10/13)",
+    lat: 31.2202, lng: 121.4748, src: "gcj",
+    warn: "Pin is approximate within Xintiandi: search the name in Apple Maps." },
+  { id: "d4-ot", day: 4, cat: "food", rn: true,
+    en: "OT Other Tea (Xintiandi)", zh: "OT另茶(上海新天地店)", time: "17:45 · Drink",
+    tip: "Exotic-style milk tea; try the 雪域咸奶茶 (snowy salted milk tea). Another branch is in Taikoo Hui at Nanjing W. Rd exit 8 (Day 5).",
+    metro: "Xintiandi (L10/13)",
+    lat: 31.2192, lng: 121.4752, src: "gcj",
+    warn: "Pin is approximate within Xintiandi: search the name in Apple Maps." },
+  { id: "d4-hdl", day: 4, cat: "food", rn: true,
+    en: "Haidilao Hotpot (Dapu Rd)", zh: "海底捞火锅(打浦路店)", time: "19:00 · Dinner",
+    tip: "Hotpot at 打浦路1号金玉兰广场, about 10 minutes from Tianzifang.",
+    metro: "Dapuqiao (L9)",
+    lat: 31.2058, lng: 121.4705, src: "gcj" },
+  { id: "d4-daiban", day: 4, cat: "food", rn: true,
+    en: "Daiban Japanese (SML Center)", zh: "呆板日式料理(打浦桥日月光店)", time: "19:00 · Dinner (alt)",
+    tip: "Photogenic Japanese plates on black tables; the sweet-shrimp rice (甜虾饭) is the RedNote favourite. ~¥123 a head. 徐家汇路618号日月光中心4F. Book ahead.",
+    metro: "Dapuqiao (L9)",
+    lat: 31.207108, lng: 121.468628, src: "gcj" },
+
+  /* ---------------- Day 5 · Thu 26 Nov ---------------- */
+  // Ordered west → east: Jing'an Temple, then along Nanjing W. Rd to People's Square, ending at Joy City for sunset.
+  { id: "d5-jingan", day: 5, cat: "photo",
+    en: "Jing'an Temple", zh: "静安寺", time: "08:30 · Morning",
+    tip: "Golden roofs against glass towers: 70–135mm from across Nanjing W. Rd, before the crowds.",
+    metro: "Jing'an Temple (L2/7/14)",
+    lat: 31.225215, lng: 121.4407923, src: "wgs" },
+  { id: "d5-huxi", day: 5, cat: "food", rn: true,
+    en: "Huxi Old Lane Noodles (Jing'an Temple)", zh: "沪西老弄堂面馆(静安寺店)", time: "09:15 · Noodle breakfast",
+    tip: "Shikumen-house noodle shop at 北京西路1738号: 蛤蜊猪肝拌面 (clam and pork-liver noodles) in a savoury-sweet sauce. ~¥42.",
+    metro: "Jing'an Temple (L2/7/14), 5–7 min walk",
+    lat: 31.2300, lng: 121.4470, src: "gcj",
+    warn: "Opening time not verified: check it opens this early." },
+  { id: "d5-charlie", day: 5, cat: "food", rn: true,
+    en: "Charlietown Black Tea Co. (Kerry Centre)", zh: "CHARLIETOWN红茶公司(上海静安嘉里中心店)", time: "10:00 · Tea",
+    tip: "Black-tea-only bar with five black-tea bases and British-vintage décor, ~¥30+.",
+    metro: "Jing'an Temple (L2/7/14)",
+    lat: 31.2264, lng: 121.4455, src: "wgs",
+    warn: "Pin is at Kerry Centre; find the exact shop on the mall directory." },
+  { id: "d5-shaanxin", day: 5, cat: "photo", rn: true,
+    en: "Shaanxi North Road", zh: "陕西北路", time: "10:45 · Late morning",
+    tip: "Historic mansions and churches along the street; walk it north–south toward Nanjing W. Rd.",
+    metro: "Nanjing West Rd (L2/12/13)",
+    lat: 31.2310, lng: 121.4550, src: "gcj" },
+  { id: "d5-zhangyuan", day: 5, cat: "photo",
+    en: "Zhangyuan", zh: "张园", time: "11:30 · Midday",
+    tip: "A large restored block of stone-gate (石库门) lanes: shoot the long lane perspectives.",
+    metro: "Nanjing West Rd (L2/12/13)",
+    lat: 31.2297, lng: 121.4590, src: "gcj" },
+  { id: "d5-heytea", day: 5, cat: "food", rn: true,
+    en: "HEYTEA LAB 2.0 (Fengshengli)", zh: "喜茶丰盛里LAB店", time: "12:00 · Drink",
+    tip: "The first Heytea Lab 2.0: tea, cake, gelato and bake labs under one roof. 茂名北路259号101室, next to Zhangyuan.",
+    metro: "Nanjing West Rd (L2/12/13)", exit: "Exit 13",
+    lat: 31.2290, lng: 121.4605, src: "gcj" },
+  { id: "d5-butter", day: 5, cat: "food", rn: true,
+    en: "Butterful & Creamorous (Wujiang Rd flagship)", zh: "BUTTERFUL&CREAMOROUS 黄油与面包(上海旗舰店)", time: "12:45 · Bakery",
+    tip: "Butter-forward bakery at 吴江路289号, next to Sephora.",
+    metro: "Nanjing West Rd (L2/12/13)",
+    lat: 31.2318, lng: 121.4625, src: "gcj",
+    warn: "Assumed this is the 'butter%' from your RedNote list; tell me if it's a different shop." },
+  { id: "d5-laoju", day: 5, cat: "food", rn: true,
+    en: "Laoju Mutton Noodles", zh: "佬居羊肉面(人民广场店)", time: "13:30 · Late lunch",
+    tip: "白切羊肉 and 羊肉面 at 广西北路470弄. Queues grow at night, so lunch is easier.",
+    metro: "People's Square (L1/2/8)",
+    lat: 31.2378, lng: 121.4745, src: "gcj" },
+  { id: "d5-park", day: 5, cat: "food", rn: true,
+    en: "Park Hotel Butterfly Pastry", zh: "国际饭店蝴蝶酥", time: "14:45 · Snack",
+    tip: "蝴蝶酥 from the street-side shop at 南京西路170号; good as a flight gift too.",
+    metro: "People's Square (L1/2/8)",
+    lat: 31.2355, lng: 121.4690, src: "gcj" },
+  { id: "d5-louxia", day: 5, cat: "food", rn: true,
+    en: "Louxia Yogurt (Jing'an Joy City)", zh: "楼下酸奶(静安大悦城店)", time: "16:15 · Sunset (~16:53)",
+    tip: "New-Chinese yogurt drinks and bowls, ~¥25. Then shoot Joy City's rooftop Ferris wheel against the sunset sky.",
+    metro: "Xinzha Rd (L1) / Qufu Rd (L8/12)",
+    lat: 31.2440, lng: 121.4720, src: "gcj",
+    warn: "The original Xiangyang S. Rd store has closed; this Joy City branch is from a RedNote/Instagram list. Pin is approximate." },
+  { id: "d5-deda", day: 5, cat: "food", rn: true,
+    en: "Deda Western Restaurant", zh: "德大西菜社", time: "18:00 · Dinner",
+    tip: "炸猪排 · 罗宋汤: Shanghai-style Western food since 1897.",
+    metro: "People's Square (L1/2/8)",
+    lat: 31.2340, lng: 121.4660, src: "gcj",
+    warn: "Listed at 南京西路473号, but may have moved to the Shanxi S. Rd cluster: check before going." },
+
+  /* ---------------- Day 6 · Fri 27 Nov ---------------- */
+  { id: "d6-wsz", day: 6, cat: "food",
+    en: "Wan Shou Zhai", zh: "万寿斋", time: "07:30 · Breakfast",
+    tip: "Old-school state-run xiaolongbao shop at 山阴路123号; opens around 5 AM.",
+    metro: "Dongbaoxing Rd (L3)",
+    lat: 31.265945, lng: 121.484810, src: "gcj" },
+  { id: "d6-duolun", day: 6, cat: "photo",
+    en: "Duolun Road", zh: "多伦路", time: "08:30 · Morning",
+    tip: "1930s literary quarter with almost no crowds: doorways, signage, bronze statues.",
+    metro: "Dongbaoxing Rd (L3)",
+    lat: 31.2625, lng: 121.4830, src: "gcj" },
+  { id: "d6-1933", day: 6, cat: "photo",
+    en: "1933 Old Millfun", zh: "1933老场坊", time: "10:30 · Midday",
+    tip: "Concrete ramps and air bridges: shoot down the light wells with people for scale. 沙泾路10号.",
+    metro: "Hailun Rd (L4/10)",
+    lat: 31.2575, lng: 121.4935, src: "gcj" },
+  { id: "d6-hanghai", day: 6, cat: "photo", rn: true,
+    en: "Hanghai (Maritime) Park", zh: "北外滩航海公园", time: "13:30 · Afternoon",
+    tip: "New 35,000 m² riverside park opposite Baiyulan Plaza, the start of the North Bund citywalk. 东大名路470号.",
+    metro: "International Cruise Terminal (L12)",
+    lat: 31.2470, lng: 121.5000, src: "gcj" },
+  { id: "d6-manner", day: 6, cat: "food",
+    en: "Manner Coffee (Baiyulan Plaza)", zh: "Manner Coffee(白玉兰广场店)", time: "14:30 · Coffee",
+    tip: "Riverside seats facing the Pearl Tower; try the salted cream cheese latte. 东长治路588号.",
+    metro: "International Cruise Terminal (L12)",
+    lat: 31.2482, lng: 121.4985, src: "gcj" },
+  { id: "d6-zhapu", day: 6, cat: "photo", rn: true,
+    en: "Zhapu Road Bridge", zh: "乍浦路桥", time: "15:00 · 2 h before sunset",
+    tip: "Make three versions: 24–35mm wide, 50–85mm compressed, vertical. Lamppost at the frame edge, Pearl Tower off-centre.",
+    metro: "Tiantong Rd (L10/12)",
+    lat: 31.2448, lng: 121.4830, src: "wgs" },
+  { id: "d6-waibaidu", day: 6, cat: "photo",
+    en: "Waibaidu Bridge", zh: "外白渡桥", time: "15:45 · Late afternoon",
+    tip: "Let the steel truss divide the frame; place a distant tower inside one arch.",
+    metro: "Tiantong Rd (L10/12)",
+    lat: 31.2453073, lng: 121.4857442, src: "wgs" },
+  { id: "d6-nbplat", day: 6, cat: "photo", rn: true,
+    en: "North Bund Viewing Platform", zh: "北外滩观景台", time: "16:30 · Sunset (~16:53)",
+    tip: "The 'Bund trio' (Pearl Tower, Jin Mao, Shanghai Tower) in one sunset frame.",
+    metro: "International Cruise Terminal (L12)",
+    lat: 31.2458, lng: 121.4950, src: "gcj" },
+  { id: "d6-nbriver", day: 6, cat: "photo", rn: true,
+    en: "North Bund Riverside", zh: "北外滩滨江", time: "17:00 · Blue hour",
+    tip: "Keep a third of the frame water; 70–135mm to compress the towers; expose for the brightest lights.",
+    metro: "International Cruise Terminal (L12)",
+    lat: 31.2475, lng: 121.5040, src: "gcj" },
+  { id: "d6-gongping", day: 6, cat: "photo",
+    en: "Gongping Road Ferry", zh: "公平路轮渡站", time: "17:20 · Blue hour",
+    tip: "A boat under the towers for scale: 1/125–1/250 s handheld, or 2–8 s on a tripod. Two L12 stops from the hotel.",
+    metro: "International Cruise Terminal (L12)",
+    lat: 31.2522, lng: 121.5080, src: "gcj" },
+  { id: "d6-llf", day: 6, cat: "food",
+    en: "Lin Long Fang (Zhapu Rd)", zh: "麟笼坊(乍浦路店)", time: "19:00 · Dinner",
+    tip: "全家福 'Family Feast' basket of mixed xiaolongbao.",
+    metro: "Tiantong Rd (L10/12)",
+    lat: 31.2482, lng: 121.4872, src: "gcj" },
+
+  /* ---------------- Day 7 · Sat 28 Nov ---------------- */
+  { id: "d7-dexing", day: 7, cat: "food", rn: true,
+    en: "De Xing Guan", zh: "德兴馆(广东路总店)", time: "07:30 · Breakfast",
+    tip: "焖蹄面 / 焖肉面 with Su-style toppings; Michelin-listed. 广东路471号.",
+    metro: "East Nanjing Rd (L2/10)",
+    lat: 31.2345, lng: 121.4820, src: "gcj",
+    warn: "Reports say De Xing Guan also opened on 福建中路; check which branch is open." },
+  { id: "d7-zhuang", day: 7, cat: "food", rn: true,
+    en: "Zhuang's Longxing Crab Dishes", zh: "庄氏隆兴·非遗蟹点(南京东路店)", time: "09:00 · Brunch (alt)",
+    tip: "Crab-meat (蟹粉) dishes, hand-picked in view behind the glass kitchen window.",
+    metro: "East Nanjing Rd (L2/10)",
+    lat: 31.2378, lng: 121.4845, src: "gcj",
+    warn: "Pin is approximate: search the name in Apple Maps." }
+];
+
+/* =====================================================================
+   GCJ-02 <-> WGS-84 conversion (standard Krasovsky ellipsoid formula)
+   ===================================================================== */
+const GEO_A = 6378245.0, GEO_EE = 0.00669342162296594323;
+function tLat(x, y) {
+  let r = -100 + 2 * x + 3 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * Math.sqrt(Math.abs(x));
+  r += (20 * Math.sin(6 * x * Math.PI) + 20 * Math.sin(2 * x * Math.PI)) * 2 / 3;
+  r += (20 * Math.sin(y * Math.PI) + 40 * Math.sin(y / 3 * Math.PI)) * 2 / 3;
+  r += (160 * Math.sin(y / 12 * Math.PI) + 320 * Math.sin(y * Math.PI / 30)) * 2 / 3;
+  return r;
+}
+function tLng(x, y) {
+  let r = 300 + x + 2 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * Math.sqrt(Math.abs(x));
+  r += (20 * Math.sin(6 * x * Math.PI) + 20 * Math.sin(2 * x * Math.PI)) * 2 / 3;
+  r += (20 * Math.sin(x * Math.PI) + 40 * Math.sin(x / 3 * Math.PI)) * 2 / 3;
+  r += (150 * Math.sin(x / 12 * Math.PI) + 300 * Math.sin(x / 30 * Math.PI)) * 2 / 3;
+  return r;
+}
+function wgsToGcj(lat, lng) {
+  let dLat = tLat(lng - 105, lat - 35), dLng = tLng(lng - 105, lat - 35);
+  const radLat = lat / 180 * Math.PI;
+  let magic = Math.sin(radLat); magic = 1 - GEO_EE * magic * magic;
+  const sqrtMagic = Math.sqrt(magic);
+  dLat = (dLat * 180) / ((GEO_A * (1 - GEO_EE)) / (magic * sqrtMagic) * Math.PI);
+  dLng = (dLng * 180) / (GEO_A / sqrtMagic * Math.cos(radLat) * Math.PI);
+  return { lat: lat + dLat, lng: lng + dLng };
+}
+function gcjToWgs(lat, lng) {
+  let w = { lat, lng };
+  for (let i = 0; i < 3; i++) {           // iterate for sub-metre accuracy
+    const g = wgsToGcj(w.lat, w.lng);
+    w = { lat: w.lat - (g.lat - lat), lng: w.lng - (g.lng - lng) };
+  }
+  return w;
+}
+
+/* Street addresses (from the sources found during research) for "Copy address". */
+const ADDR = {
+  "hotel": "上海市杨浦区江浦路518号",
+  "d1-egg": "上海市黄浦区定兴路6号",
+  "d1-dahuchun": "上海市黄浦区四川中路136号",
+  "d1-xinya": "上海市黄浦区南京东路719号",
+  "d2-wukang": "上海市徐汇区淮海中路1850号",
+  "d2-ops": "上海市徐汇区太原路177弄1号",
+  "d2-sunflour": "上海市徐汇区安福路308号",
+  "d2-ferguson": "上海市徐汇区武康路376号",
+  "d2-icy": "上海市徐汇区乌鲁木齐中路276号",
+  "d2-kooriya": "上海市徐汇区常熟路185号",
+  "d2-jesse": "上海市徐汇区天平路41号",
+  "d4-gmc": "上海市黄浦区淮海中路588号",
+  "d4-volcan": "上海市徐汇区永康路80号",
+  "d4-eau": "上海市徐汇区永康路85号",
+  "d4-dtx": "上海市黄浦区陕西南路309号",
+  "d4-hdl": "上海市黄浦区打浦路1号金玉兰广场",
+  "d4-daiban": "上海市黄浦区徐家汇路618号日月光中心4楼",
+  "d5-jingan": "上海市静安区南京西路1686号",
+  "d5-huxi": "上海市静安区北京西路1738号",
+  "d5-heytea": "上海市静安区茂名北路259号101室",
+  "d5-butter": "上海市静安区吴江路289号",
+  "d5-laoju": "上海市黄浦区广西北路470弄",
+  "d5-park": "上海市黄浦区南京西路170号",
+  "d5-deda": "上海市黄浦区南京西路473号",
+  "d6-wsz": "上海市虹口区山阴路123号",
+  "d6-1933": "上海市虹口区沙泾路10号",
+  "d6-hanghai": "上海市虹口区东大名路470号",
+  "d6-manner": "上海市虹口区东长治路588号",
+  "d7-dexing": "上海市黄浦区广东路471号"
+};
+
+/* What to paste into a map app's search box when the display name is not searchable as-is. */
+const QUERY = {
+  "d1-shanxi": "小绍兴 山西南路",
+  "d1-dongchang": "东昌路站",
+  "d2-ops": "OPS咖啡 太原路",
+  "d2-hengshan": "衡山路",
+  "d2-ferguson": "武康庭",
+  "d2-panyu": "上生新所",
+  "d2-kooriya": "鲨鱼冰屋 常熟路",
+  "d4-volcan": "Café del Volcán 永康路",
+  "d4-eau": "EAU Cafe 永康路",
+  "d4-sinan": "思南公馆",
+  "d4-xtd": "屋里厢石库门博物馆",
+  "d5-butter": "BUTTERFUL&CREAMOROUS 吴江路",
+  "d6-gongping": "公平路轮渡站"
+};
+
+const ALL = [HOTEL, ...STOPS];
+const byId = {};
+ALL.forEach(s => {
+  if (s.src === "gcj") { s.gcj = { lat: s.lat, lng: s.lng }; s.wgs = gcjToWgs(s.lat, s.lng); }
+  else { s.wgs = { lat: s.lat, lng: s.lng }; s.gcj = wgsToGcj(s.lat, s.lng); }
+  // Gaode tiles are drawn in GCJ-02, so pins go on their GCJ-02 position.
+  s.pos = s.gcj;
+  s.addr = ADDR[s.id] || "";
+  s.q = QUERY[s.id] || s.zh;
+  byId[s.id] = s;
+});
+
+/* =====================================================================
+   STATE
+   ===================================================================== */
+const state = { day: "all", cat: "all", me: null };
+
+/* =====================================================================
+   MAP
+   ===================================================================== */
+const map = L.map("map", { zoomControl: false, tap: true }).setView([31.230, 121.475], 13);
+// Gaode (AMap) tiles: served inside China and drawn in GCJ-02. Other basemaps are left out
+// because OSM-based tiles use WGS-84 and every pin would sit ~500 m off on them.
+const GAODE_ATTR = "&copy; 高德地图 AutoNavi";
+const gaodeZh = L.tileLayer("https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}", {
+  subdomains: "1234", maxZoom: 18, attribution: GAODE_ATTR
+}).addTo(map);
+const gaodeEn = L.tileLayer("https://webrd0{s}.is.autonavi.com/appmaptile?lang=en&size=1&scale=1&style=8&x={x}&y={y}&z={z}", {
+  subdomains: "1234", maxZoom: 18, attribution: GAODE_ATTR
+});
+const gaodeSat = L.tileLayer("https://webst0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}", {
+  subdomains: "1234", maxZoom: 18, attribution: GAODE_ATTR
+});
+L.control.zoom({ position: "topright" }).addTo(map);
+L.control.layers({ "高德 中文": gaodeZh, "Gaode English": gaodeEn, "高德 卫星 Satellite": gaodeSat }, null, { position: "topright" }).addTo(map);
+
+const EMOJI = { photo: "📷", food: "🍜", hotel: "🏨" };
+const LABEL = { photo: "📷 Photo", food: "🍜 Food", hotel: "🏨 Hotel" };
+
+function makeIcon(s) {
+  return L.divIcon({
+    className: "pin-wrap",
+    html: `<div class="pin ${s.cat}"><span>${EMOJI[s.cat]}</span></div>`,
+    iconSize: [30, 30], iconAnchor: [15, 30], popupAnchor: [0, -30]
+  });
+}
+
+function esc(str) {
+  return String(str).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function fmtDist(m) {
+  return m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1)} km`;
+}
+// Straight-line distance × 1.3 for street detours, at ~80 m per minute.
+function walkMins(m) { return Math.max(1, Math.round(m * 1.3 / 80)); }
+function distFrom(ref, s) { return map.distance([ref.lat, ref.lng], [s.pos.lat, s.pos.lng]); }
+
+function popupEl(s) {
+  const day = DAYS.find(d => d.n === s.day);
+  const ll = `${s.gcj.lat.toFixed(6)},${s.gcj.lng.toFixed(6)}`;
+  const apple = `https://maps.apple.com/?q=${encodeURIComponent(s.q)}&ll=${ll}`;
+  const amap = `https://uri.amap.com/marker?position=${s.gcj.lng.toFixed(6)},${s.gcj.lat.toFixed(6)}&name=${encodeURIComponent(s.q)}&coordinate=gaode&callnative=1`;
+  const d = state.me ? distFrom(state.me, s) : null;
+  const el = document.createElement("div");
+  el.className = "pp";
+  el.innerHTML = `
+    <h3>${esc(s.en)}</h3>
+    <div class="zh">${esc(s.zh)}</div>
+    <div class="tags">
+      <span class="tag ${s.cat}">${LABEL[s.cat]}</span>
+      <span class="tag time">${esc(s.time)}</span>
+      ${s.rn ? '<span class="tag rn">📕 RedNote</span>' : ""}
+    </div>
+    <div class="why"><b>⭐ Why go</b>${esc(s.tip)}</div>
+    ${d !== null ? `<div class="row dist">📏 ${fmtDist(d)} from you · ~${walkMins(d)} min walk</div>` : ""}
+    ${s.addr ? `<div class="row">📍 ${esc(s.addr)}</div>` : ""}
+    <div class="row">🚇 ${esc(s.metro)}${s.exit ? " · " + esc(s.exit) : ""}</div>
+    ${day ? `<div class="row">🗓️ Day ${day.n} · ${esc(day.date)}</div>` : ""}
+    ${s.warn ? `<div class="warn">⚠️ ${esc(s.warn)}</div>` : ""}
+    <div class="actions">
+      <button class="btn copy" type="button" data-copy="name">📋 Copy name</button>
+      ${s.addr ? '<button class="btn copy" type="button" data-copy="addr">📋 Copy address</button>' : ""}
+      <a class="btn apple" href="${apple}" target="_blank" rel="noopener">Apple Maps</a>
+      <a class="btn amap" href="${amap}" target="_blank" rel="noopener">高德 Amap</a>
+    </div>`;
+  el.querySelectorAll("[data-copy]").forEach(b => b.addEventListener("click", e => {
+    L.DomEvent.stop(e);
+    if (b.dataset.copy === "addr") copyText(s.addr, "address"); else copyText(s.q, "name");
+  }));
+  return el;
+}
+
+const markers = {};
+const markerLayer = L.layerGroup().addTo(map);
+ALL.forEach(s => {
+  const m = L.marker([s.pos.lat, s.pos.lng], { icon: makeIcon(s), title: s.en, riseOnHover: true });
+  m.bindPopup(() => popupEl(s), {
+    autoPanPaddingTopLeft: L.point(16, 170),
+    autoPanPaddingBottomRight: L.point(16, 140),
+    maxWidth: 300
+  });
+  markers[s.id] = m;
+});
+
+/* =====================================================================
+   FILTERS
+   ===================================================================== */
+function isVisible(s) {
+  if (s.cat === "hotel") return true;
+  return (state.day === "all" || s.day === state.day) && (state.cat === "all" || s.cat === state.cat);
+}
+
+function applyFilters(fit) {
+  // Add/remove only what changed so an open popup is not closed.
+  const shown = [];
+  ALL.forEach(s => {
+    const m = markers[s.id];
+    if (isVisible(s)) {
+      if (!markerLayer.hasLayer(m)) markerLayer.addLayer(m);
+      if (s.cat !== "hotel") shown.push(s);
+    } else if (markerLayer.hasLayer(m)) {
+      markerLayer.removeLayer(m);
+    }
+  });
+  renderChips();
+  renderDayInfo(shown);
+  if (fit) fitTo(shown.filter(s => state.day !== "all" || s.day !== 3));
+  renderNearby();
+}
+
+function fitTo(list) {
+  if (!list.length) return;
+  const b = L.latLngBounds(list.map(s => [s.pos.lat, s.pos.lng]));
+  const tb = document.getElementById("toolbar").getBoundingClientRect();
+  const dr = document.getElementById("drawer").getBoundingClientRect();
+  const wide = window.innerWidth > 640;
+  map.fitBounds(b, {
+    paddingTopLeft: [wide ? tb.right + 16 : 24, wide ? 24 : tb.bottom + 16],
+    paddingBottomRight: [24, wide ? 24 : window.innerHeight - dr.top + 16],
+    maxZoom: 16
+  });
+}
+
+function renderChips() {
+  const dayWrap = document.getElementById("dayChips");
+  dayWrap.innerHTML = "";
+  [{ key: "all", label: "All Days", sub: "21–28 Nov" }]
+    .concat(DAYS.map(d => ({ key: d.n, label: `Day ${d.n}`, sub: d.date })))
+    .forEach(o => {
+      const b = document.createElement("button");
+      b.className = "chip" + (state.day === o.key ? " active" : "");
+      b.type = "button";
+      b.setAttribute("aria-pressed", String(state.day === o.key));
+      b.innerHTML = `${esc(o.label)}<small>${esc(o.sub)}</small>`;
+      b.addEventListener("click", () => { state.day = o.key; applyFilters(true); });
+      dayWrap.appendChild(b);
+    });
+
+  const catWrap = document.getElementById("catChips");
+  catWrap.innerHTML = "";
+  [{ key: "all", label: "All" }, { key: "photo", label: "📷 Photo" }, { key: "food", label: "🍜 Food" }]
+    .forEach(o => {
+      const b = document.createElement("button");
+      b.className = "chip" + (state.cat === o.key ? " active" : "");
+      b.type = "button";
+      b.setAttribute("aria-pressed", String(state.cat === o.key));
+      b.textContent = o.label;
+      b.addEventListener("click", () => { state.cat = o.key; applyFilters(true); });
+      catWrap.appendChild(b);
+    });
+  markOverflowingChips();
+}
+
+function renderDayInfo(shown) {
+  const box = document.getElementById("dayInfo");
+  const dd = DAYS.find(x => x.n === state.day);
+  const catLabel = { all: "All spots", photo: "📷 Photo", food: "🍜 Food" }[state.cat];
+  document.getElementById("tbSummary").textContent =
+    `${dd ? `Day ${dd.n} · ${dd.date}` : "All days"} · ${catLabel} ▾`;
+  if (state.day === "all") {
+    box.innerHTML = `<b>${shown.length} spots</b> across 7 days · tap a pin for details`;
+    return;
+  }
+  const d = DAYS.find(x => x.n === state.day);
+  box.innerHTML = `<b>${esc(d.title)}</b> · ${shown.length} spots · ${esc(d.date)}`;
+}
+
+/* =====================================================================
+   NEARBY LIST
+   ===================================================================== */
+const NEARBY_MAX = 15;
+function renderNearby() {
+  const ref = state.me || map.getCenter();
+  document.getElementById("drTitle").textContent = state.me ? "Nearest to you" : "Nearest to map centre";
+  document.getElementById("nearNote").textContent = state.me
+    ? "Straight-line distance; walking time is a rough estimate."
+    : "Tap 📍 Locate me to sort by where you are.";
+  const rows = ALL
+    .filter(s => s.cat !== "hotel" && isVisible(s))
+    .map(s => ({ s, d: distFrom(ref, s) }))
+    .sort((a, b) => a.d - b.d)
+    .slice(0, NEARBY_MAX);
+  const list = document.getElementById("nearList");
+  list.innerHTML = "";
+  if (!rows.length) {
+    list.innerHTML = '<li class="empty">No spots match the current filters.</li>';
+    return;
+  }
+  rows.forEach(({ s, d }) => {
+    const li = document.createElement("li");
+    li.innerHTML = `
+      <span class="nl-dot" style="background:var(--${s.cat})">${EMOJI[s.cat]}</span>
+      <span class="nl-name"><div>${esc(s.en)}</div><small>${esc(s.zh)} · D${s.day}</small></span>
+      <span class="nl-dist">${fmtDist(d)}${state.me ? `<small>~${walkMins(d)} min</small>` : ""}</span>
+      <button class="nl-copy" type="button" aria-label="Copy Chinese name">📋</button>`;
+    li.querySelector(".nl-name").addEventListener("click", () => {
+      map.setView([s.pos.lat, s.pos.lng], Math.max(map.getZoom(), 16));
+      markers[s.id].openPopup();
+    });
+    li.querySelector(".nl-copy").addEventListener("click", () => copyText(s.q, "name"));
+    list.appendChild(li);
+  });
+}
+map.on("moveend", () => { if (!state.me) renderNearby(); });
+
+/* =====================================================================
+   LIVE LOCATION (device GPS is WGS-84; converted to GCJ-02 to match the Gaode basemap)
+   ===================================================================== */
+let meMarker = null, meCircle = null, watchId = null, centreOnFix = false, lastNearby = 0;
+
+function setBadge(text, kind) {
+  const b = document.getElementById("badge");
+  b.textContent = text;
+  b.className = "badge" + (kind ? " " + kind : "");
+}
+
+function locate() {
+  if (!("geolocation" in navigator)) {
+    setBadge("No GPS", "err");
+    toast("This browser can't share your location.");
+    return;
+  }
+  centreOnFix = true;
+  if (state.me) {
+    map.setView([state.me.lat, state.me.lng], Math.max(map.getZoom(), 16));
+    centreOnFix = false;
+  }
+  if (watchId !== null) return;
+  setBadge("Locating…", "busy");
+  watchId = navigator.geolocation.watchPosition(onPosition, onPositionError, {
+    enableHighAccuracy: true, maximumAge: 15000, timeout: 20000
+  });
+}
+
+function onPosition(p) {
+  const { accuracy } = p.coords;
+  const { lat, lng } = wgsToGcj(p.coords.latitude, p.coords.longitude);
+  state.me = { lat, lng };
+  if (!meMarker) {
+    meMarker = L.marker([lat, lng], {
+      icon: L.divIcon({ className: "me-wrap", html: '<div class="me-dot"></div>', iconSize: [22, 22], iconAnchor: [11, 11] }),
+      zIndexOffset: 1000, interactive: false, keyboard: false
+    }).addTo(map);
+    meCircle = L.circle([lat, lng], {
+      radius: accuracy, color: "#0ea5e9", weight: 1, fillColor: "#0ea5e9", fillOpacity: 0.12, interactive: false
+    }).addTo(map);
+  } else {
+    meMarker.setLatLng([lat, lng]);
+    meCircle.setLatLng([lat, lng]).setRadius(accuracy);
+  }
+  setBadge(`📍 Live ±${Math.round(accuracy)} m`, "ok");
+  if (centreOnFix) { centreOnFix = false; map.setView([lat, lng], 16); }
+  const now = Date.now();
+  if (now - lastNearby > 3000) { lastNearby = now; renderNearby(); }
+}
+
+function onPositionError(err) {
+  if (err.code === 1) {
+    setBadge("Location blocked", "err");
+    toast("Location permission denied: allow it for this page in your browser settings.");
+    navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+  } else if (!state.me) {
+    setBadge("No GPS fix yet", "err");
+  }
+}
+
+/* =====================================================================
+   COPY + TOAST
+   ===================================================================== */
+async function copyText(text, label) {
+  let ok = false;
+  try {
+    if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); ok = true; }
+  } catch (e) { /* fall back below */ }
+  if (!ok) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select(); ta.setSelectionRange(0, text.length);
+    try { ok = document.execCommand("copy"); } catch (e) {}
+    ta.remove();
+  }
+  toast(ok ? `Copied ${label}: ${text}` : `Copy failed. Long-press to select: ${text}`);
+}
+
+let toastTimer = null;
+function toast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 2400);
+}
+
+/* =====================================================================
+   UI WIRING
+   ===================================================================== */
+function setDrawer(open) {
+  document.getElementById("drawer").classList.toggle("collapsed", !open);
+  document.getElementById("drToggle").setAttribute("aria-expanded", String(open));
+}
+document.getElementById("drToggle").addEventListener("click", () => {
+  setDrawer(document.getElementById("drawer").classList.contains("collapsed"));
+});
+function setToolbar(open) {
+  document.getElementById("toolbar").classList.toggle("collapsed", !open);
+  const t = document.getElementById("tbToggle");
+  t.setAttribute("aria-expanded", String(open));
+  t.setAttribute("aria-label", open ? "Hide filters" : "Show filters");
+  if (open) markOverflowingChips();
+}
+// Show the edge fade only on chip rows that actually scroll sideways.
+function markOverflowingChips() {
+  document.querySelectorAll(".chips").forEach(c => c.classList.toggle("overflows", c.scrollWidth > c.clientWidth + 1));
+}
+window.addEventListener("resize", markOverflowingChips);
+// Escape closes an open popup first, then any open panel.
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  if (map.getContainer().querySelector(".leaflet-popup")) return;
+  setToolbar(false);
+  setDrawer(false);
+});
+document.getElementById("tbToggle").addEventListener("click", () => {
+  setToolbar(document.getElementById("toolbar").classList.contains("collapsed"));
+});
+// The collapsed pill shows the current filter; tapping it opens the filters.
+document.getElementById("tbSummary").addEventListener("click", () => setToolbar(true));
+// On phones, tapping the map tucks both panels away so the map is usable.
+map.on("click", () => {
+  if (window.innerWidth > 640) return;
+  setToolbar(false);
+  setDrawer(false);
+});
+document.getElementById("locBtn").addEventListener("click", locate);
+
+// Keep Leaflet controls clear of the floating panels on phones.
+const root = document.documentElement;
+const ro = new ResizeObserver(() => {
+  root.style.setProperty("--tb-h", document.getElementById("toolbar").offsetHeight + "px");
+  root.style.setProperty("--dr-h", document.getElementById("drawer").offsetHeight + "px");
+});
+ro.observe(document.getElementById("toolbar"));
+ro.observe(document.getElementById("drawer"));
+
+// Start with both panels collapsed on small screens so the map is visible.
+if (window.innerWidth <= 640) {
+  setToolbar(false);
+  setDrawer(false);
+}
+
+applyFilters(true);
+</script>
+</body>
+</html>
