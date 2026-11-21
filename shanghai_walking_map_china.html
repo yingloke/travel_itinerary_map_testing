@@ -20,6 +20,9 @@
     --chip-active-text: #ffffff;
     --photo: #2563eb;
     --food: #ea580c;
+    --walk: #2563eb;
+    --sweet: #db2777;
+    --travel: #475569;
     --hotel: #059669;
     --route: #7c3aed;
     --danger: #dc2626;
@@ -91,6 +94,7 @@
     mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
   }
   .chips::-webkit-scrollbar { display: none; }
+  .chips[hidden] { display: none; }
   .chip {
     flex: 0 0 auto; border: 0; background: var(--chip-bg); border-radius: 999px;
     padding: 6px 11px; font-size: 13px; line-height: 1.2; white-space: nowrap;
@@ -190,6 +194,10 @@
   .pin span { transform: rotate(45deg); font-size: 14px; line-height: 1; }
   .pin.photo { background: var(--photo); }
   .pin.food { background: var(--food); }
+  .pin.walk { background: var(--walk); }
+  .pin.sweet { background: var(--sweet); }
+  .pin.travel { background: var(--travel); }
+  .pin .letter { transform: rotate(45deg); font: 800 14px/1 -apple-system, "Segoe UI", sans-serif; color: #fff; }
   .pin.hotel { background: var(--hotel); }
   /* The pin whose details are open: larger, with a ring, so you can see which one you tapped. */
   .pin.selected { scale: 1.3; box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--focus), 0 3px 8px rgba(0,0,0,.35); }
@@ -239,6 +247,12 @@
   .pp .tag { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px; }
   .pp .tag.photo { background: rgba(37, 99, 235, .12); color: var(--photo); }
   .pp .tag.food { background: rgba(234, 88, 12, .12); color: var(--food); }
+  .pp .tag.walk { background: rgba(37, 99, 235, .12); color: var(--walk); }
+  .pp .tag.sweet { background: rgba(219, 39, 119, .12); color: var(--sweet); }
+  .pp .tag.travel { background: #f1f5f9; color: var(--travel); }
+  .pp .route { font-size: 12.5px; color: #1e3a8a; background: #eff6ff; border-radius: 8px; padding: 7px 9px; margin-bottom: 8px; }
+  .pp .route summary { cursor: pointer; font-weight: 700; }
+  .pp .route p { margin: 6px 0 0; line-height: 1.45; color: #1e293b; }
   .pp .tag.hotel { background: rgba(5, 150, 105, .12); color: var(--hotel); }
   .pp .tag.time { background: #f1f5f9; color: #334155; }
   .pp .tag.rn { background: #fee2e2; color: #b91c1c; }
@@ -320,12 +334,14 @@
   <div id="tbBody">
     <div class="chips" id="dayChips" role="group" aria-label="Day"></div>
     <div class="chips" id="catChips" role="group" aria-label="Category"></div>
+    <div class="chips" id="routeChips" role="group" aria-label="City walk route"></div>
     <div id="dayInfo"></div>
     <div class="legend">
-      <span><i style="background:var(--photo)"></i>Photo</span>
-      <span><i style="background:var(--food)"></i>Food</span>
+      <span><i style="background:var(--walk)"></i>Walks</span>
+      <span><i style="background:var(--food)"></i>Meals</span>
+      <span><i style="background:var(--sweet)"></i>Sweets</span>
       <span><i style="background:var(--hotel)"></i>Hotel</span>
-      <span>📕 = RedNote find · pins ±150 m</span>
+      <span>A–G = city walk routes · pins ±150 m</span>
     </div>
   </div>
 </header>
@@ -361,14 +377,40 @@
    Apple Maps links use GCJ-02, which is what Apple Maps expects in China.
    ===================================================================== */
 const DAYS = [
-  { n: 1, date: "Sun 22 Nov", title: "Bund · Old City · Lujiazui sunset" },
-  { n: 2, date: "Mon 23 Nov", title: "Western French Concession" },
-  { n: 3, date: "Tue 24 Nov", title: "Shanghai Disneyland" },
-  { n: 4, date: "Wed 25 Nov", title: "Eastern FFC · shikumen lanes" },
-  { n: 5, date: "Thu 26 Nov", title: "Jing'an · People's Square" },
-  { n: 6, date: "Fri 27 Nov", title: "Hongkou · North Bund sunset" },
-  { n: 7, date: "Sat 28 Nov", title: "Checkout breakfast" }
+  { n: 1, date: "Sat 21 Nov", title: "Land at PVG T1 21:30 · hotel · late-night lamb skewers" },
+  { n: 2, date: "Sun 22 Nov", title: "Free day · pick a city walk below" },
+  { n: 3, date: "Mon 23 Nov", title: "Shanghai Disneyland" },
+  { n: 4, date: "Tue 24 Nov", title: "Free day · pick a city walk below" },
+  { n: 5, date: "Wed 25 Nov", title: "Free day · pick a city walk below" },
+  { n: 6, date: "Thu 26 Nov", title: "Suzhou day trip (outside this map)" },
+  { n: 7, date: "Fri 27 Nov", title: "Chill day" },
+  { n: 8, date: "Sat 28 Nov", title: "Fly home · PVG T1 at 19:05" }
 ];
+
+/* City walks from your "City walk route" sheet, in walking order. Stops are listed by id. */
+const ROUTES = {
+  A: { name: "Ginkgo garden → the Bund", zh: "时空花园 → 外滩",
+       how: "Metro L2/10 East Nanjing Rd, exit 7. Walk a few minutes to 时空花园 (Jiangxi Mid Rd × Hankou Rd), Huangpu's first heritage-tree pocket park, with two 100-year-old ginkgos (no. 0367 and 0368) next to Holy Trinity Church. Then head east to the riverside: start at Waibaidu Bridge and walk south past the Bund buildings (lights come on in the evening). If you still have energy, finish with the ¥2 ferry at the Jinling Rd (E) pier. Autumn: ginkgos plus the Bund breeze.",
+       stops: ["a-start", "a-garden", "a-church", "waibaidu", "a-bund", "a-ferry"] },
+  B: { name: "Bund half-day walk", zh: "北外滩 → 外滩 → 南京路",
+       how: "North Bund riverside green → Waibaidu Bridge → the Bund → Nanjing Rd pedestrian street. The post's timing: leave ~15:00, North Bund ~16:00, dinner on Nanjing Rd ~18:00, Bund lights ~19:30, home ~20:30. Tip: for the night view, go straight to Bund viewing-platform entrances 9 or 11 instead of from Nanjing Rd, which is extremely crowded.",
+       stops: ["b-northbund", "waibaidu", "b-platform", "b-nanjing"] },
+  C: { name: "Wukang Rd – Anfu Rd plane trees", zh: "武康路 – 安福路",
+       how: "Metro L10/11 Jiaotong University, exit 7; 3 minutes to Wukang Mansion. Walk north along Wukang Rd past Ferguson Lane, the Romeo Balcony and Ba Jin's former residence, then turn into Anfu Rd (Shanghai Dramatic Arts Centre, lots of small shops). Plane trees are best late Nov – early Dec.",
+       stops: ["c-start", "wukang", "c-ferguson", "c-romeo", "c-bajin", "c-anfu"] },
+  D: { name: "Autumn ginkgo half-day", zh: "丽园公园 → 局门路 → 世博公园",
+       how: "About 2.6 km on foot plus 1 metro stop. Madang Rd station (L9/13) → 丽园公园 (丽园路565号, 5:00–21:00, huge ginkgos) → 局门路, a ginkgo lane they don't sweep; at 8号桥 go to 局门路550号, take the right-hand lifts to 3F for the ginkgo terrace → metro L13 from Expo Museum station, 1 stop to Expo Avenue → 世博公园 (望江驿12号 ginkgo gate, the 'Monet bridge'). Go in the morning for the best light.",
+       stops: ["d-madang", "d-liyuan", "d-jumen", "d-expo"] },
+  E: { name: "Yu Garden", zh: "豫园",
+       how: "Start at Yuyuan Garden station exit 7 (L10/14). Your sheet has no other stops for this route yet.",
+       stops: ["e-yuyuan"] },
+  F: { name: "Nanjing Rd shops → the Bund", zh: "南京东路 → 外滩",
+       how: "MINISO LAND global flagship (3 floors of IP collabs) → Sanrio Gift Gate (Shanghai-only xiaolongbao and shengjian plush) → POP MART → New World Daimaru (spiral escalators) → chiikawa flagship (China's first, 2 floors, Shanghai-only crab Usagi) → Peace Hotel and the Bund (building lights at 19:00) → dinner at 渝囡囡 Shanghai-style hotpot (crab dishes, 腌笃鲜 broth) with 石库制饼 soft cookies next door.",
+       stops: ["f-miniso", "f-sanrio", "f-popmart", "f-daimaru", "f-chiikawa", "f-peace", "f-hotpot"] },
+  G: { name: "Xintiandi shopping walk", zh: "新天地",
+       how: "Metro L13 一大会址·新天地 exit 6, cross the road to Style II, then walk north and leave from Huangpi Rd (S) station with no backtracking. Style II: AMAM bakery, PAOPAO, apM CUBE K-street (B2), LOOKNOW Jellycat. Style I: HARMAY, GENTLE MONSTER, 13DE MARZO, food court. Xintiandi North: shikumen lanes, IL TEATRO, LE LABO. Xintiandi Plaza: food on B1/B2. K11: POP MART, art museum on B3. Nearby: 1st CPC Congress site (free) and Korean Provisional Government site (¥20).",
+       stops: ["g-style2", "g-style1", "g-north", "g-plaza", "g-k11", "g-huangpi"] }
+};
 
 const HOTEL = {
   id: "hotel", day: 0, cat: "hotel",
@@ -381,360 +423,314 @@ const HOTEL = {
   warn: "Pin placed at Pingliang Rd station; the hotel is a short walk away on Jiangpu Rd."
 };
 
+/* day: 0 = not scheduled yet (shows under "Anytime"). far: left out when fitting "All days" so the city stays in view. */
 const STOPS = [
-  /* ---------------- Day 1 · Sun 22 Nov ---------------- */
-  { id: "d1-egg", day: 1, cat: "food", rn: true,
-    en: "Dingxing Rd Egg-Pancake Stall", zh: "定兴路蛋饼摊", time: "07:30 · Breakfast",
-    tip: "Classic Shanghai danbing (蛋饼) made to order at 定兴路6号.",
-    metro: "People's Square (L1/2/8)", exit: "Exit 8, ~330 m walk",
-    lat: 31.235390, lng: 121.471582, src: "gcj" },
-  { id: "d1-nanxiang", day: 1, cat: "food",
-    en: "Nanxiang Mantou Dian", zh: "南翔馒头店", time: "08:00 · Breakfast",
-    tip: "Crab meat & pork xiaolongbao (蟹粉鲜肉). Go early, the Yu Garden queue builds by 10:00.",
-    metro: "Yuyuan Garden (L10/14)",
-    lat: 31.2281, lng: 121.4869, src: "wgs" },
-  { id: "d1-yu", day: 1, cat: "photo",
-    en: "Yu Garden", zh: "豫园", time: "08:30 · Morning",
-    tip: "Zigzag bridge (九曲桥) and Huxinting teahouse reflections; tight shots of the up-swept eaves. Opens 08:00.",
-    metro: "Yuyuan Garden (L10/14)",
-    lat: 31.2289274, lng: 121.4879752, src: "wgs" },
-  { id: "d1-bundplat", day: 1, cat: "photo", rn: true,
-    en: "Bund Viewing Platform", zh: "外滩观景台", time: "10:30 · Morning light",
-    tip: "Morning sun lights the Bund facades. Look down 九江路 (Jiujiang Rd): it points straight at the Pearl Tower, a ready-made leading line.",
-    metro: "East Nanjing Rd (L2/10)",
-    lat: 31.2395, lng: 121.4905, src: "gcj" },
-  { id: "d1-beijing", day: 1, cat: "photo", rn: true,
-    en: "East Beijing Road", zh: "北京东路", time: "11:00 · Late morning",
-    tip: "Century-old banks and trading houses at the Bund end. 50–85mm on the Art Deco tops.",
-    metro: "East Nanjing Rd (L2/10)",
-    lat: 31.2424, lng: 121.4880, src: "gcj" },
-  { id: "d1-shanxi", day: 1, cat: "food", rn: true,
-    en: "Old-Brand Food Cluster, Shanxi S. Rd", zh: "山西南路老字号", time: "12:00 · Lunch",
-    tip: "Former Yunnan Rd brands reopened here in Feb 2026: 小绍兴 白斩鸡 · 小金陵 盐水鸭/爆鱼/酱鸭腿 · 洪长兴 牛肉煎包.",
-    metro: "East Nanjing Rd (L2/10)",
-    lat: 31.2335, lng: 121.4830, src: "gcj",
-    warn: "Exact door numbers unverified: search the brand name + 山西南路 in Amap/Dianping." },
-  { id: "d1-dahuchun", day: 1, cat: "food", rn: true,
-    en: "Da Hu Chun (Sichuan Mid. Rd)", zh: "大壶春(四川中路店)", time: "12:00 · Lunch (alt)",
-    tip: "鲜肉生煎: fully-leavened shengjianbao, Michelin-listed. 四川中路136号.",
-    metro: "East Nanjing Rd (L2/10)",
-    lat: 31.2350, lng: 121.4878, src: "gcj" },
-  { id: "d1-shendacheng", day: 1, cat: "food", rn: true,
-    en: "Shen Da Cheng", zh: "沈大成", time: "14:00 · Snack",
-    tip: "双酿团 (double-filled glutinous rice balls). 绿豆刨冰 if the day is warm.",
-    metro: "East Nanjing Rd (L2/10)",
-    lat: 31.2365, lng: 121.4790, src: "gcj" },
-  { id: "d1-dongchang", day: 1, cat: "photo", rn: true,
-    en: "Dongchang Rd Skybridge", zh: "东昌路天桥", time: "15:00 · Afternoon",
-    tip: "Walk west from the station, cross Pudong S. Rd and Lujiazui Ring Rd onto the long footbridge: SWFC, Jin Mao and Shanghai Tower side by side. Shoot vertical.",
-    metro: "Dongchang Rd (L2)",
-    lat: 31.2350, lng: 121.5085, src: "gcj" },
-  { id: "d1-sht", day: 1, cat: "photo",
-    en: "Shanghai Tower (observatory, optional)", zh: "上海中心大厦", time: "15:45 · Before sunset",
-    tip: "Lens flat against the glass and dark clothing to kill reflections.",
-    metro: "Lujiazui (L2/14)",
-    lat: 31.2335, lng: 121.5056, src: "gcj" },
-  { id: "d1-binjiang", day: 1, cat: "photo", rn: true,
-    en: "Binjiang Park (Pudong)", zh: "滨江公园", time: "16:30 · Sunset (~16:53)",
-    tip: "RedNote's 'sunset broadcast' spot: face west across the river to the Bund as the sky colours.",
-    metro: "Lujiazui (L2/14)",
-    lat: 31.2410, lng: 121.4960, src: "gcj" },
-  { id: "d1-promenade", day: 1, cat: "photo", rn: true,
-    en: "Lujiazui Riverside Walk", zh: "陆家嘴滨江步道", time: "17:00 · Blue hour",
-    tip: "The lit Bund across the water. Brace on the railing for 2–8 s exposures.",
-    metro: "Lujiazui (L2/14)",
-    lat: 31.2372, lng: 121.4975, src: "gcj" },
-  { id: "d1-xinya", day: 1, cat: "food", rn: true,
-    en: "Xinya Restaurant", zh: "新雅粤菜馆", time: "19:00 · Dinner",
-    tip: "走油肉 · 狮子头 · 糖醋小排 · 乳腐肉. 南京东路719号.",
-    metro: "East Nanjing Rd (L2/10)",
-    lat: 31.2363, lng: 121.4770, src: "gcj" },
-  { id: "d1-lailai", day: 1, cat: "food",
-    en: "Lai Lai Xiao Long (dinner alt)", zh: "莱莱小笼", time: "19:00 · Dinner (alt)",
-    tip: "蟹膏鲜肉 xiaolongbao and 蟹粉小馄饨, on Tianjin Rd just off Nanjing E. Rd.",
-    metro: "East Nanjing Rd (L2/10)",
-    lat: 31.2393, lng: 121.4810, src: "gcj" },
-
-  /* ---------------- Day 2 · Mon 23 Nov ---------------- */
-  { id: "d2-wukang", day: 2, cat: "photo", rn: true,
-    en: "Wukang Mansion", zh: "武康大楼", time: "07:00 · 7–9 AM",
-    tip: "Shoot the wedge-shaped 'ship's bow' from across the five-way junction. Late-Nov plane trees should be gold.",
-    metro: "Jiaotong University (L10/11)",
-    lat: 31.2062561, lng: 121.4337292, src: "wgs" },
-  { id: "d2-ops", day: 2, cat: "food", rn: true,
-    en: "Ops Cafe", zh: "OPS咖啡(太原路177弄1号)", time: "08:45 · Coffee",
-    tip: "Standing-only coffee lab with seasonal experimental drinks, from ~¥38. Queues up to 60 min, so go early.",
-    metro: "Jiashan Rd (L9/12) or Zhaojiabang Rd, ~12 min walk",
-    lat: 31.2045, lng: 121.4505, src: "gcj" },
-  { id: "d2-hengshan", day: 2, cat: "photo", rn: true,
-    en: "Hengshan & Taiyuan Roads", zh: "衡山路·太原路", time: "09:45 · Morning",
-    tip: "Garden villas and pavements carpeted with plane-tree leaves; Taiyuan Rd is the quieter of the two.",
-    metro: "Hengshan Rd (L1)",
-    lat: 31.2045, lng: 121.4460, src: "gcj" },
-  { id: "d2-sunflour", day: 2, cat: "food", rn: true,
-    en: "Sunflour Bakery", zh: "Sunflour(安福路店)", time: "11:00 · Brunch",
-    tip: "European bakery at the Anfu/Wukang corner: 小太阳 and chocolate puffs; set lunch at midday. 安福路308号.",
-    metro: "Changshu Rd (L1/7)",
-    lat: 31.2105, lng: 121.4405, src: "gcj" },
-  { id: "d2-ferguson", day: 2, cat: "photo",
-    en: "Wukang Rd & Ferguson Lane", zh: "武康路·武康庭", time: "11:45 · Late morning",
-    tip: "Villa gates, tree tunnels and heritage plaques; Ferguson Lane is at 376号. Shoot from the pavement: these are homes.",
-    metro: "Shanghai Library (L10)", exit: "Exit 1, then walk south on Wukang Rd",
-    lat: 31.2085, lng: 121.4385, src: "gcj" },
-  { id: "d2-anfu", day: 2, cat: "photo", rn: true,
-    en: "Anfu Road", zh: "安福路", time: "12:30 · Midday",
-    tip: "Street portraits and shopfronts under the plane trees.",
-    metro: "Changshu Rd (L1/7)",
-    lat: 31.2115, lng: 121.4430, src: "gcj" },
-  { id: "d2-icy", day: 2, cat: "food", rn: true,
-    en: "ICY Gelato (Fuxing W. Rd villa)", zh: "ICY Gelato(复兴西路洋房店)", time: "13:00 · Dessert",
-    tip: "Italian-style gelato in an old garden house at 乌鲁木齐中路276号.",
-    metro: "Changshu Rd (L1/7)", exit: "Exit 8, ~400 m walk",
-    lat: 31.2105, lng: 121.4490, src: "gcj" },
-  { id: "d2-xinle", day: 2, cat: "photo", rn: true,
-    en: "Xinle Road", zh: "新乐路", time: "13:30 · Afternoon",
-    tip: "The blue onion domes of the old Russian Orthodox church against plane trees; small boutiques.",
-    metro: "Changshu Rd (L1/7)",
-    lat: 31.2160, lng: 121.4480, src: "gcj" },
-  { id: "d2-kooriya", day: 2, cat: "food", rn: true,
-    en: "Kooriya Shark", zh: "鲨鱼冰屋 Kooriya Shark(常熟路店)", time: "14:00 · Dessert",
-    tip: "Small, cosy Japanese kakigori bar: 西柚刨冰 (grapefruit) and 焦糖海盐刨冰 (salted caramel). 常熟路185号, near Huaihai Rd.",
-    metro: "Changshu Rd (L1/7), ~4 min walk",
-    lat: 31.2135, lng: 121.4520, src: "gcj" },
-  { id: "d2-xinhua", day: 2, cat: "photo", rn: true,
-    en: "Xinhua Road", zh: "新华路", time: "14:45 · Golden hour",
-    tip: "1930s villas behind hedges on the 'garden villa' road; low sun through the trees from ~15:30.",
-    metro: "Jiaotong University (L10/11)",
-    lat: 31.2040, lng: 121.4260, src: "gcj" },
-  { id: "d2-panyu", day: 2, cat: "photo", rn: true,
-    en: "Panyu Rd & Columbia Circle", zh: "番禺路·上生新所", time: "15:45 · Golden hour",
-    tip: "RedNote spelt it 潘禺路. 上生·新所 has the 1920s Columbia Country Club pool and villa: warm light on the arcades.",
-    metro: "Jiaotong University (L10/11), ~15 min walk",
-    lat: 31.2105, lng: 121.4275, src: "gcj",
-    warn: "Columbia Circle pairing is from Claude's own knowledge, not a fetched source." },
-  { id: "d2-jesse", day: 2, cat: "food", rn: true,
-    en: "Old Jesse", zh: "老吉士酒家(天平路店)", time: "18:00 · Dinner, book ahead",
-    tip: "红烧肉 · 葱油拌面 · 葱烤鱼头 (must be pre-ordered) · 蟹粉拌饭 in crab season. 天平路41号.",
-    metro: "Jiaotong University (L10/11)",
-    lat: 31.2052, lng: 121.4347, src: "wgs" },
-
-  /* ---------------- Day 3 · Tue 24 Nov ---------------- */
-  { id: "d3-disney", day: 3, cat: "photo", rn: true,
-    en: "Shanghai Disneyland", zh: "上海迪士尼乐园", time: "All day · castle at blue hour",
-    tip: "Weekday visit. Book tickets and Premier Access in the official app; castle at ~17:00 blue hour, fireworks with a wide lens.",
+  /* ---------------- Getting there ---------------- */
+  { id: "pvg", day: 1, alsoDay: 8, cat: "travel", far: true,
+    en: "Pudong Airport Terminal 1", zh: "浦东国际机场T1航站楼", time: "Arrive 21 Nov 21:30 · fly 28 Nov 19:05",
+    tip: "Arrival on Day 1 and your 19:05 flight home on Day 8, both Terminal 1.",
+    metro: "Pudong Airport T1&2 (L2 / Maglev)",
+    lat: 31.1500, lng: 121.8080, src: "gcj" },
+  { id: "disney", day: 3, cat: "walk", far: true,
+    en: "Shanghai Disneyland", zh: "上海迪士尼乐园", time: "Mon 23 Nov · all day",
+    tip: "Your Day 3. Book tickets and Premier Access in the official app; castle at blue hour (~17:00), then the fireworks.",
     metro: "Disney Resort (L11)",
-    lat: 31.1440, lng: 121.6570, src: "gcj",
-    warn: "November opening hours and fireworks schedule not verified: check the app." },
-  { id: "d3-ahma", day: 3, cat: "food", rn: true,
-    en: "Ah Ma Handmade (Disneytown)", zh: "阿嬷手作(迪士尼小镇)", time: "10:00–22:00 · Drink",
-    tip: "Guangxi-style made-to-order tea drinks with rice mochi. Disneytown is outside the park gates, so it works after the fireworks too. Also at IFC Lujiazui (Day 1).",
-    metro: "Disney Resort (L11)",
-    lat: 31.1430, lng: 121.6625, src: "gcj" },
+    lat: 31.1440, lng: 121.6570, src: "gcj" },
 
-  /* ---------------- Day 4 · Wed 25 Nov ---------------- */
-  { id: "d4-gmc", day: 4, cat: "food", rn: true,
-    en: "Guangmingcun", zh: "光明邨大酒家", time: "08:30 · Breakfast",
-    tip: "鲜肉月饼 (fresh-pork mooncakes) hot from the oven at the 淮海中路588号 flagship. Expect a queue.",
-    metro: "South Huangpi Rd (L1)",
-    lat: 31.22051, lng: 121.46756, src: "gcj" },
-  { id: "d4-leach", day: 4, cat: "food", rn: true,
-    en: "LEACH Milk Tea (Julu Rd)", zh: "LEACH栗其(巨鹿店)", time: "09:00 · Milk tea",
-    tip: "Milk-tea shop; the favourite is 大红袍珍珠奶茶 (roasted-oolong pearl milk tea). Open 08:30–22:00.",
-    metro: "South Shaanxi Rd (L1/10/12)",
-    lat: 31.2240, lng: 121.4620, src: "gcj",
-    warn: "Street number on Julu Rd not confirmed: pin is approximate, so search 栗其 巨鹿 in Apple Maps." },
-  { id: "d4-sinan", day: 4, cat: "photo", rn: true,
-    en: "Sinan Rd & Sinan Mansions", zh: "思南路·思南公馆", time: "09:30 · Morning",
-    tip: "Ivy-covered garden villas on a quiet plane-tree road; morning side-light on the brick.",
-    metro: "Xintiandi (L10/13)",
-    lat: 31.2160, lng: 121.4690, src: "gcj" },
-  { id: "d4-yongjia", day: 4, cat: "photo", rn: true,
-    en: "Yongjia Road", zh: "永嘉路", time: "11:00 · Late morning",
-    tip: "Lane-house street under a leafy canopy. Frame the lane mouths, not into homes.",
-    metro: "Shaanxi South Rd (L1/10/12)",
-    lat: 31.2105, lng: 121.4570, src: "gcj" },
-  { id: "d4-volcan", day: 4, cat: "food",
-    en: "Café del Volcán", zh: "Café del Volcán(永康路80号)", time: "12:30 · Coffee",
-    tip: "Yunnan pour-over at a tiny, focused bar with about 8 seats.",
-    metro: "Shaanxi South Rd (L1/10/12)",
-    lat: 31.2106, lng: 121.4581, src: "gcj" },
-  { id: "d4-eau", day: 4, cat: "food", rn: true,
-    en: "EAU 2.0 Café", zh: "EAU Cafe(永康路店)", time: "13:00 · Coffee",
-    tip: "The redesigned corner café at 永康路85号 with an outdoor terrace, right across from Café del Volcán.",
-    metro: "Shaanxi South Rd (L1/10/12)", exit: "Exit 7, ~490 m walk",
-    lat: 31.210764, lng: 121.457733, src: "gcj" },
-  { id: "d4-dtx", day: 4, cat: "food", rn: true,
-    en: "Dong Tai Xiang", zh: "东泰祥生煎馆(陕西南路店)", time: "13:30 · Late lunch",
-    tip: "Heritage-listed shengjianbao and 开洋葱油拌面 with dried shrimp, ~¥26 a head. 陕西南路309号.",
-    metro: "Shaanxi South Rd (L1/10/12)",
-    lat: 31.2125, lng: 121.4590, src: "gcj" },
-  { id: "d4-tzf", day: 4, cat: "photo",
-    en: "Tianzifang", zh: "田子坊", time: "15:30 · Golden hour",
-    tip: "Shikumen door frames and laundry poles; shoot low and tight in warm side-light.",
-    metro: "Dapuqiao (L9)",
-    lat: 31.21034, lng: 121.4641036, src: "wgs" },
-  { id: "d4-xtd", day: 4, cat: "photo",
-    en: "Xintiandi & Shikumen Open House", zh: "新天地·屋里厢石库门博物馆", time: "17:00 · Blue hour",
-    tip: "Lit shikumen facades; the museum is a restored 1920s lane-house interior.",
-    metro: "Xintiandi (L10/13)",
-    lat: 31.2195, lng: 121.4740, src: "gcj" },
-  { id: "d4-tamkoko", day: 4, cat: "food", rn: true,
-    en: "TamKoKo Thai Tea Garden (Xintiandi)", zh: "Tamkoko泰柯茶园(上海新天地店)", time: "17:30 · Drink",
-    tip: "Thai milk tea in a tea-garden-style shop.",
-    metro: "Xintiandi (L10/13)",
-    lat: 31.2202, lng: 121.4748, src: "gcj",
-    warn: "Pin is approximate within Xintiandi: search the name in Apple Maps." },
-  { id: "d4-ot", day: 4, cat: "food", rn: true,
-    en: "OT Other Tea (Xintiandi)", zh: "OT另茶(上海新天地店)", time: "17:45 · Drink",
-    tip: "Exotic-style milk tea; try the 雪域咸奶茶 (snowy salted milk tea). Another branch is in Taikoo Hui at Nanjing W. Rd exit 8 (Day 5).",
-    metro: "Xintiandi (L10/13)",
-    lat: 31.2192, lng: 121.4752, src: "gcj",
-    warn: "Pin is approximate within Xintiandi: search the name in Apple Maps." },
-  { id: "d4-hdl", day: 4, cat: "food", rn: true,
-    en: "Haidilao Hotpot (Dapu Rd)", zh: "海底捞火锅(打浦路店)", time: "19:00 · Dinner",
-    tip: "Hotpot at 打浦路1号金玉兰广场, about 10 minutes from Tianzifang.",
-    metro: "Dapuqiao (L9)",
-    lat: 31.2058, lng: 121.4705, src: "gcj" },
-  { id: "d4-daiban", day: 4, cat: "food", rn: true,
-    en: "Daiban Japanese (SML Center)", zh: "呆板日式料理(打浦桥日月光店)", time: "19:00 · Dinner (alt)",
-    tip: "Photogenic Japanese plates on black tables; the sweet-shrimp rice (甜虾饭) is the RedNote favourite. ~¥123 a head. 徐家汇路618号日月光中心4F. Book ahead.",
+  /* ---------------- Meals (your "Meal" sheet) ---------------- */
+  { id: "m-daiban", day: 0, cat: "food",
+    en: "Daiban Japanese", zh: "呆板日式料理(打浦桥日月光店)", time: "Dinner · book ahead",
+    tip: "Upscale Japanese (your note: 'Atas 日本餐'); the sweet-shrimp rice (甜虾饭) is the favourite. ~¥123 a head.",
     metro: "Dapuqiao (L9)",
     lat: 31.207108, lng: 121.468628, src: "gcj" },
+  { id: "m-lamb", day: 1, cat: "food",
+    en: "Long Long Ago Lamb Skewers", zh: "很久以前羊肉串(光音广场店)", time: "Late night · open till 1am",
+    tip: "Lamb-skewer BBQ, your Day 1 late-night stop after checking in.",
+    metro: "Lujiazui (L2/14)",
+    lat: 31.243376, lng: 121.513088, src: "gcj",
+    warn: "This branch is in Lujiazui (Pudong), about 5 km from the hotel, so take a taxi." },
+  { id: "m-haidilao", day: 0, cat: "food",
+    en: "Haidilao Hotpot (Dapu Rd)", zh: "海底捞火锅(打浦路店)", time: "Open 24 hours",
+    tip: "Hotpot chain on 金玉兰广场 4F, open 24 hours: good for a late meal.",
+    metro: "Dapuqiao (L9)",
+    lat: 31.2058, lng: 121.4705, src: "gcj" },
+  { id: "m-wonton", day: 0, cat: "food",
+    en: "Nong Tang Little Wontons", zh: "弄堂小馄饨食府", time: "Any meal",
+    tip: "鲜肉小馄饨 (pork little wontons), 葱油拌面 (scallion-oil noodles), 炸猪排 (fried pork chop). Beside 威海别墅.",
+    metro: "Nanjing West Rd (L2/12/13)",
+    lat: 31.226008, lng: 121.457803, src: "gcj" },
+  { id: "m-guangming", day: 0, cat: "food",
+    en: "Guangmingcun Mooncakes", zh: "光明邨鲜肉月饼", time: "Snack · morning queues are shorter",
+    tip: "Fresh-pork mooncakes (鲜肉月饼) from Guangmingcun's takeaway window: shorter queue than the Huaihai Rd flagship and better value.",
+    metro: "South Huangpi Rd (L1)",
+    lat: 31.22051, lng: 121.46756, src: "gcj",
+    warn: "Pin is at the 淮海中路588号 flagship. Your note mentions a separate takeaway window: check which one your post meant." },
+  { id: "m-xiandelai", day: 0, cat: "food",
+    en: "Xian De Lai Pork Chop Rice Cakes", zh: "鲜得来排骨年糕(宁海东路店)", time: "Any meal",
+    tip: "Century-old brand (since 1921), moved from Yunnan S Rd to 宁海东路290号. Order 排骨年糕, 油豆腐百叶汤 and the red-bean shaved ice.",
+    metro: "Dashijie (L8)", exit: "Exit 1, across the road",
+    lat: 31.2288, lng: 121.4800, src: "gcj" },
+  { id: "m-dahuchun", day: 0, cat: "food",
+    en: "Da Hu Chun Shengjian", zh: "大壶春(四川中路店)", time: "Breakfast / lunch",
+    tip: "Classic 'clear-water' style shengjian: fully-leavened fluffy dough, savoury pork. Order 鲜肉生煎.",
+    metro: "East Nanjing Rd (L2/10)",
+    lat: 31.2350, lng: 121.4878, src: "gcj" },
+  { id: "m-yuxingji", day: 0, cat: "food",
+    en: "Yu Xing Ji Crab-Roe Noodles", zh: "裕兴记·蟹黄面馆(人民广场店)", time: "Lunch",
+    tip: "Suzhou-style crab-roe noodles (蟹黄面); hand-peeled river shrimp too. 九江路686号腾飞元创大厦1层.",
+    metro: "People's Square (L1/2/8)",
+    lat: 31.2365, lng: 121.4765, src: "gcj",
+    warn: "Pin is approximate: search the name in Amap." },
+  { id: "m-shucaiji", day: 0, cat: "food",
+    en: "Shu Cai Ji", zh: "舒蔡记生煎菜饭", time: "7:30–19:30",
+    tip: "Lane-side Benbang shop that visitors love; vegetable rice (菜饭) and shengjian (生煎包) are the signatures. 浙江中路120号.",
+    metro: "East Nanjing Rd (L2/10)",
+    lat: 31.2335, lng: 121.4788, src: "gcj",
+    warn: "Pin is approximate: search the name in Amap." },
+  { id: "m-shendacheng", day: 0, cat: "food",
+    en: "Shen Da Cheng", zh: "沈大成", time: "Snack",
+    tip: "Century-old rice-cake shop: 双酿团 with red-bean and sesame fillings, rolled in coconut.",
+    metro: "East Nanjing Rd (L2/10)",
+    lat: 31.2365, lng: 121.4790, src: "gcj" },
+  { id: "m-gulooo", day: 0, cat: "food",
+    en: "GULOOO Burger (Hong Kong Plaza)", zh: "GULOOO BURGER鲜制牛肉汉堡(香港广场店)", time: "Any meal",
+    tip: "Fresh beef burgers. 淮海中路282号香港广场北座B1-02C.",
+    metro: "South Huangpi Rd (L1)",
+    lat: 31.2232, lng: 121.4735, src: "gcj",
+    warn: "Pin is approximate within Hong Kong Plaza." },
+  { id: "m-chenglong", day: 0, cat: "food",
+    en: "Cheng Long Hang Crab House", zh: "成隆行蟹王府(九江路店)", time: "Lunch / dinner",
+    tip: "Crab specialist: 蟹粉 dishes such as 秃黄油捞饭 and 蟹粉小笼. 九江路216号, opposite Holy Trinity Church (route A).",
+    metro: "East Nanjing Rd (L2/10)",
+    lat: 31.236984, lng: 121.48597, src: "gcj" },
 
-  /* ---------------- Day 5 · Thu 26 Nov ---------------- */
-  // Ordered west → east: Jing'an Temple, then along Nanjing W. Rd to People's Square, ending at Joy City for sunset.
-  { id: "d5-jingan", day: 5, cat: "photo",
-    en: "Jing'an Temple", zh: "静安寺", time: "08:30 · Morning",
-    tip: "Golden roofs against glass towers: 70–135mm from across Nanjing W. Rd, before the crowds.",
-    metro: "Jing'an Temple (L2/7/14)",
-    lat: 31.225215, lng: 121.4407923, src: "wgs" },
-  { id: "d5-huxi", day: 5, cat: "food", rn: true,
-    en: "Huxi Old Lane Noodles (Jing'an Temple)", zh: "沪西老弄堂面馆(静安寺店)", time: "09:15 · Noodle breakfast",
-    tip: "Shikumen-house noodle shop at 北京西路1738号: 蛤蜊猪肝拌面 (clam and pork-liver noodles) in a savoury-sweet sauce. ~¥42.",
-    metro: "Jing'an Temple (L2/7/14), 5–7 min walk",
-    lat: 31.2300, lng: 121.4470, src: "gcj",
-    warn: "Opening time not verified: check it opens this early." },
-  { id: "d5-charlie", day: 5, cat: "food", rn: true,
-    en: "Charlietown Black Tea Co. (Kerry Centre)", zh: "CHARLIETOWN红茶公司(上海静安嘉里中心店)", time: "10:00 · Tea",
-    tip: "Black-tea-only bar with five black-tea bases and British-vintage décor, ~¥30+.",
-    metro: "Jing'an Temple (L2/7/14)",
-    lat: 31.2264, lng: 121.4455, src: "wgs",
-    warn: "Pin is at Kerry Centre; find the exact shop on the mall directory." },
-  { id: "d5-shaanxin", day: 5, cat: "photo", rn: true,
-    en: "Shaanxi North Road", zh: "陕西北路", time: "10:45 · Late morning",
-    tip: "Historic mansions and churches along the street; walk it north–south toward Nanjing W. Rd.",
-    metro: "Nanjing West Rd (L2/12/13)",
-    lat: 31.2310, lng: 121.4550, src: "gcj" },
-  { id: "d5-zhangyuan", day: 5, cat: "photo",
-    en: "Zhangyuan", zh: "张园", time: "11:30 · Midday",
-    tip: "A large restored block of stone-gate (石库门) lanes: shoot the long lane perspectives.",
-    metro: "Nanjing West Rd (L2/12/13)",
-    lat: 31.2297, lng: 121.4590, src: "gcj" },
-  { id: "d5-heytea", day: 5, cat: "food", rn: true,
-    en: "HEYTEA LAB 2.0 (Fengshengli)", zh: "喜茶丰盛里LAB店", time: "12:00 · Drink",
-    tip: "The first Heytea Lab 2.0: tea, cake, gelato and bake labs under one roof. 茂名北路259号101室, next to Zhangyuan.",
+  /* ---------------- Sweets & drinks (your "Sweets" sheet) ---------------- */
+  { id: "s-heytea", day: 0, cat: "sweet",
+    en: "HEYTEA LAB 2.0", zh: "喜茶丰盛里LAB店", time: "Drink",
+    tip: "The first Heytea Lab 2.0, next to Zhangyuan: tea, cake, gelato and bakery labs under one roof. 茂名北路259号101室.",
     metro: "Nanjing West Rd (L2/12/13)", exit: "Exit 13",
     lat: 31.2290, lng: 121.4605, src: "gcj" },
-  { id: "d5-butter", day: 5, cat: "food", rn: true,
-    en: "Butterful & Creamorous (Wujiang Rd flagship)", zh: "BUTTERFUL&CREAMOROUS 黄油与面包(上海旗舰店)", time: "12:45 · Bakery",
-    tip: "Butter-forward bakery at 吴江路289号, next to Sephora.",
+  { id: "s-charlie", day: 0, cat: "sweet",
+    en: "Charlietown Black Tea Co.", zh: "CHARLIETOWN红茶公司(上海静安嘉里中心店)", time: "Drink",
+    tip: "British-inspired black-tea brand: pure black-tea bases, nothing artificial, with taro paste and mochi.",
+    metro: "Jing'an Temple (L2/7/14)",
+    lat: 31.2264, lng: 121.4455, src: "wgs",
+    warn: "Pin is at Kerry Centre; find the shop on the mall directory." },
+  { id: "s-ahma", day: 3, cat: "sweet", far: true,
+    en: "Ah Ma Handmade (Disneytown)", zh: "阿嬷手作(迪士尼小镇)", time: "10:00–22:00",
+    tip: "Order 老椰清补凉 (coconut 'cooling' dessert). Disneytown is outside the park gates, so it suits your Disney day.",
+    metro: "Disney Resort (L11)",
+    lat: 31.1430, lng: 121.6625, src: "gcj" },
+  { id: "s-taibenniu", day: 0, cat: "sweet",
+    en: "Tai Ben Niu Milk Tea", zh: "太犇牛手作茶铺(上海荟聚中心店)", time: "Drink",
+    tip: "Handmade milk-tea chain; RedNote favourites are 巧克力爆米花 and 雪山香草籽拿铁.",
+    metro: "Longxi Rd area (Changning)",
+    lat: 31.2205, lng: 121.3535, src: "gcj",
+    warn: "Only branch found is Hopson One (金钟路788号, far west). Search 太犇牛 in Amap for a closer one." },
+  { id: "s-leach", day: 0, cat: "sweet",
+    en: "LEACH Milk Tea (Julu Rd)", zh: "LEACH栗其(巨鹿店)", time: "08:30–22:00",
+    tip: "Your picks: 蜂巢焦糖鲜牛乳茶 (honeycomb caramel milk tea) and 金骏眉 粉碎冰珍珠奶茶 (crushed-ice pearl milk tea).",
+    metro: "South Shaanxi Rd (L1/10/12)",
+    lat: 31.2240, lng: 121.4620, src: "gcj",
+    warn: "Pin is approximate on Julu Rd." },
+  { id: "s-butter", day: 0, cat: "sweet",
+    en: "Butterful & Creamorous (butter%)", zh: "BUTTERFUL&CREAMOROUS 黄油与面包(上海旗舰店)", time: "Bakery",
+    tip: "Butter-forward bakery at 吴江路289号.",
     metro: "Nanjing West Rd (L2/12/13)",
     lat: 31.2318, lng: 121.4625, src: "gcj",
-    warn: "Assumed this is the 'butter%' from your RedNote list; tell me if it's a different shop." },
-  { id: "d5-laoju", day: 5, cat: "food", rn: true,
-    en: "Laoju Mutton Noodles", zh: "佬居羊肉面(人民广场店)", time: "13:30 · Late lunch",
-    tip: "白切羊肉 and 羊肉面 at 广西北路470弄. Queues grow at night, so lunch is easier.",
-    metro: "People's Square (L1/2/8)",
-    lat: 31.2378, lng: 121.4745, src: "gcj" },
-  { id: "d5-park", day: 5, cat: "food", rn: true,
-    en: "Park Hotel Butterfly Pastry", zh: "国际饭店蝴蝶酥", time: "14:45 · Snack",
-    tip: "蝴蝶酥 from the street-side shop at 南京西路170号; good as a flight gift too.",
-    metro: "People's Square (L1/2/8)",
-    lat: 31.2355, lng: 121.4690, src: "gcj" },
-  { id: "d5-louxia", day: 5, cat: "food", rn: true,
-    en: "Louxia Yogurt (Jing'an Joy City)", zh: "楼下酸奶(静安大悦城店)", time: "16:15 · Sunset (~16:53)",
-    tip: "New-Chinese yogurt drinks and bowls, ~¥25. Then shoot Joy City's rooftop Ferris wheel against the sunset sky.",
+    warn: "Assumed this is your 'butter%'." },
+  { id: "s-tamkoko", day: 0, cat: "sweet",
+    en: "TamKoKo Thai Tea Garden", zh: "Tamkoko泰柯茶园(上海新天地店)", time: "Drink",
+    tip: "Thai milk tea in a tea-garden-style shop. On route G.",
+    metro: "Xintiandi (L10/13)",
+    lat: 31.2202, lng: 121.4748, src: "gcj",
+    warn: "Pin is approximate within Xintiandi." },
+  { id: "s-louxia", day: 0, cat: "sweet",
+    en: "Louxia Yogurt (Joy City)", zh: "楼下酸奶(静安大悦城店)", time: "Yogurt",
+    tip: "New-Chinese yogurt drinks and bowls, ~¥25. Joy City's rooftop Ferris wheel is a bonus photo.",
     metro: "Xinzha Rd (L1) / Qufu Rd (L8/12)",
     lat: 31.2440, lng: 121.4720, src: "gcj",
-    warn: "The original Xiangyang S. Rd store has closed; this Joy City branch is from a RedNote/Instagram list. Pin is approximate." },
-  { id: "d5-deda", day: 5, cat: "food", rn: true,
-    en: "Deda Western Restaurant", zh: "德大西菜社", time: "18:00 · Dinner",
-    tip: "炸猪排 · 罗宋汤: Shanghai-style Western food since 1897.",
-    metro: "People's Square (L1/2/8)",
-    lat: 31.2340, lng: 121.4660, src: "gcj",
-    warn: "Listed at 南京西路473号, but may have moved to the Shanxi S. Rd cluster: check before going." },
+    warn: "Pin is approximate." },
+  { id: "s-ot", day: 0, cat: "sweet",
+    en: "OT Other Tea (Xintiandi)", zh: "OT另茶(上海新天地店)", time: "Drink",
+    tip: "Your pick: 雪域咸奶茶 (snowy salted milk tea). On route G.",
+    metro: "Xintiandi (L10/13)",
+    lat: 31.2192, lng: 121.4752, src: "gcj",
+    warn: "Pin is approximate within Xintiandi." },
+  { id: "s-kooriya", day: 0, cat: "sweet",
+    en: "Kooriya Shark Shaved Ice", zh: "鲨鱼冰屋 Kooriya Shark(常熟路店)", time: "Dessert",
+    tip: "Japanese kakigori: 西柚刨冰 (grapefruit) and 焦糖海盐刨冰 (salted caramel). 常熟路185号.",
+    metro: "Changshu Rd (L1/7), ~4 min walk",
+    lat: 31.2135, lng: 121.4520, src: "gcj" },
+  { id: "s-shangshan", day: 0, cat: "sweet",
+    en: "Shang Shan He Cha (Yongkang Rd)", zh: "上山喝茶(上海永康路店)", time: "Drink",
+    tip: "Tea-drink shop on Yongkang Rd, beside EAU Cafe.",
+    metro: "South Shaanxi Rd (L1/10/12)",
+    lat: 31.2108, lng: 121.4595, src: "gcj",
+    warn: "Pin is approximate on Yongkang Rd." },
+  { id: "s-eau", day: 0, cat: "sweet",
+    en: "EAU 2.0 Café", zh: "EAU Cafe(永康路店)", time: "Coffee",
+    tip: "Architect-designed corner café at 永康路85号 with an outdoor terrace.",
+    metro: "South Shaanxi Rd (L1/10/12)", exit: "Exit 7, ~490 m walk",
+    lat: 31.210764, lng: 121.457733, src: "gcj" },
+  { id: "s-icy", day: 0, cat: "sweet",
+    en: "ICY Gelato", zh: "ICY Gelato(复兴西路洋房店)", time: "Dessert",
+    tip: "Italian gelato in an old garden house at 乌鲁木齐中路276号.",
+    metro: "Changshu Rd (L1/7)", exit: "Exit 8, ~400 m walk",
+    lat: 31.2105, lng: 121.4490, src: "gcj" },
+  { id: "s-chuntian", day: 0, cat: "sweet",
+    en: "Chuntian Aged Tea (first store)", zh: "椿田熟成茶行(上海新天地时尚店)", time: "Drink",
+    tip: "Shanghai 'aged tea' brand (Heytea invested in 2026): HK milk tea, Thai tea and pu'er bases. Your picks: 黑武士熟成薯丸 and 富士苹果乌瓦冰茶. Xintiandi Style II B1, on route G.",
+    metro: "Xintiandi (L10/13)",
+    lat: 31.2152, lng: 121.4742, src: "gcj",
+    warn: "Pin is approximate within Xintiandi Style II." },
+  { id: "s-quchashan", day: 0, cat: "sweet",
+    en: "Qu Cha Shan (Suhe MixC)", zh: "去茶山(苏河湾万象天地店)", time: "Drink",
+    tip: "Guizhou tea brand (since 2000, ~75 stores, Shanghai since 2024): Tongren matcha, cili, xianghe glutinous rice. Your pick: 爆爆珠贵州铜仁抹茶鲜奶茶.",
+    metro: "Qufu Rd (L8/12)",
+    lat: 31.2455, lng: 121.4725, src: "gcj",
+    warn: "First Shanghai store was at Suhe Bay MixC; pin is approximate. Search 去茶山 in Amap for others." },
 
-  /* ---------------- Day 6 · Fri 27 Nov ---------------- */
-  { id: "d6-wsz", day: 6, cat: "food",
-    en: "Wan Shou Zhai", zh: "万寿斋", time: "07:30 · Breakfast",
-    tip: "Old-school state-run xiaolongbao shop at 山阴路123号; opens around 5 AM.",
-    metro: "Dongbaoxing Rd (L3)",
-    lat: 31.265945, lng: 121.484810, src: "gcj" },
-  { id: "d6-duolun", day: 6, cat: "photo",
-    en: "Duolun Road", zh: "多伦路", time: "08:30 · Morning",
-    tip: "1930s literary quarter with almost no crowds: doorways, signage, bronze statues.",
-    metro: "Dongbaoxing Rd (L3)",
-    lat: 31.2625, lng: 121.4830, src: "gcj" },
-  { id: "d6-1933", day: 6, cat: "photo",
-    en: "1933 Old Millfun", zh: "1933老场坊", time: "10:30 · Midday",
-    tip: "Concrete ramps and air bridges: shoot down the light wells with people for scale. 沙泾路10号.",
-    metro: "Hailun Rd (L4/10)",
-    lat: 31.2575, lng: 121.4935, src: "gcj" },
-  { id: "d6-hanghai", day: 6, cat: "photo", rn: true,
-    en: "Hanghai (Maritime) Park", zh: "北外滩航海公园", time: "13:30 · Afternoon",
-    tip: "New 35,000 m² riverside park opposite Baiyulan Plaza, the start of the North Bund citywalk. 东大名路470号.",
-    metro: "International Cruise Terminal (L12)",
-    lat: 31.2470, lng: 121.5000, src: "gcj" },
-  { id: "d6-manner", day: 6, cat: "food",
-    en: "Manner Coffee (Baiyulan Plaza)", zh: "Manner Coffee(白玉兰广场店)", time: "14:30 · Coffee",
-    tip: "Riverside seats facing the Pearl Tower; try the salted cream cheese latte. 东长治路588号.",
-    metro: "International Cruise Terminal (L12)",
-    lat: 31.2482, lng: 121.4985, src: "gcj" },
-  { id: "d6-zhapu", day: 6, cat: "photo", rn: true,
-    en: "Zhapu Road Bridge", zh: "乍浦路桥", time: "15:00 · 2 h before sunset",
-    tip: "Make three versions: 24–35mm wide, 50–85mm compressed, vertical. Lamppost at the frame edge, Pearl Tower off-centre.",
-    metro: "Tiantong Rd (L10/12)",
-    lat: 31.2448, lng: 121.4830, src: "wgs" },
-  { id: "d6-waibaidu", day: 6, cat: "photo",
-    en: "Waibaidu Bridge", zh: "外白渡桥", time: "15:45 · Late afternoon",
-    tip: "Let the steel truss divide the frame; place a distant tower inside one arch.",
+  /* ---------------- City walk stops (your "City walk route" sheet) ---------------- */
+  { id: "a-start", day: 0, cat: "walk", en: "East Nanjing Rd station, exit 7", zh: "南京东路站7号口",
+    time: "Start of route A", tip: "Come out of exit 7 and walk a few minutes to the ginkgo garden.",
+    metro: "East Nanjing Rd (L2/10)", exit: "Exit 7",
+    lat: 31.2391239, lng: 121.4792291, src: "wgs" },
+  { id: "a-garden", day: 0, cat: "walk", en: "Shikong Garden (ginkgo pocket park)", zh: "时空花园(江西中路汉口路)",
+    time: "Daytime", tip: "Huangpu's first heritage-tree pocket park: two 100-year-old ginkgos, nos. 0367 and 0368, beside Holy Trinity Church.",
+    metro: "East Nanjing Rd (L2/10)",
+    lat: 31.2373, lng: 121.4820, src: "wgs", warn: "Pin is approximate at Jiangxi Mid Rd × Hankou Rd." },
+  { id: "a-church", day: 0, cat: "walk", en: "Holy Trinity Church", zh: "圣三一堂",
+    time: "Daytime", tip: "1869 red-brick Anglican cathedral on Jiujiang Rd, right next to the ginkgo garden.",
+    metro: "East Nanjing Rd (L2/10)",
+    lat: 31.2384475, lng: 121.4817759, src: "wgs" },
+  { id: "waibaidu", day: 0, cat: "walk", en: "Waibaidu Bridge", zh: "外白渡桥",
+    time: "Late afternoon", tip: "1907 steel truss bridge where Suzhou Creek meets the Huangpu; frame a tower inside one arch.",
     metro: "Tiantong Rd (L10/12)",
     lat: 31.2453073, lng: 121.4857442, src: "wgs" },
-  { id: "d6-nbplat", day: 6, cat: "photo", rn: true,
-    en: "North Bund Viewing Platform", zh: "北外滩观景台", time: "16:30 · Sunset (~16:53)",
-    tip: "The 'Bund trio' (Pearl Tower, Jin Mao, Shanghai Tower) in one sunset frame.",
-    metro: "International Cruise Terminal (L12)",
-    lat: 31.2458, lng: 121.4950, src: "gcj" },
-  { id: "d6-nbriver", day: 6, cat: "photo", rn: true,
-    en: "North Bund Riverside", zh: "北外滩滨江", time: "17:00 · Blue hour",
-    tip: "Keep a third of the frame water; 70–135mm to compress the towers; expose for the brightest lights.",
-    metro: "International Cruise Terminal (L12)",
+  { id: "a-bund", day: 0, cat: "walk", en: "The Bund buildings", zh: "外滩万国建筑群",
+    time: "Evening lights", tip: "Walk south along the river past the old banks; the buildings light up around 19:00.",
+    metro: "East Nanjing Rd (L2/10)",
+    lat: 31.2385, lng: 121.4880, src: "wgs" },
+  { id: "a-ferry", day: 0, cat: "walk", en: "Jinling Rd (E) ferry pier", zh: "金陵东路渡口",
+    time: "End of route A", tip: "Finish with the ¥2 public ferry across the Huangpu for the skyline from the water.",
+    metro: "Yuyuan Garden (L10/14)",
+    lat: 31.2322, lng: 121.4903, src: "wgs", warn: "Pin is approximate." },
+  { id: "b-northbund", day: 0, cat: "walk", en: "North Bund riverside green", zh: "北外滩滨江绿地",
+    time: "~16:00", tip: "Quiet riverside boardwalk with few people; a small bridge on the way to Waibaidu gives a nice angle.",
+    metro: "International Cruise Terminal (L12), 2 stops from the hotel",
     lat: 31.2475, lng: 121.5040, src: "gcj" },
-  { id: "d6-gongping", day: 6, cat: "photo",
-    en: "Gongping Road Ferry", zh: "公平路轮渡站", time: "17:20 · Blue hour",
-    tip: "A boat under the towers for scale: 1/125–1/250 s handheld, or 2–8 s on a tripod. Two L12 stops from the hotel.",
-    metro: "International Cruise Terminal (L12)",
-    lat: 31.2522, lng: 121.5080, src: "gcj" },
-  { id: "d6-llf", day: 6, cat: "food",
-    en: "Lin Long Fang (Zhapu Rd)", zh: "麟笼坊(乍浦路店)", time: "19:00 · Dinner",
-    tip: "全家福 'Family Feast' basket of mixed xiaolongbao.",
-    metro: "Tiantong Rd (L10/12)",
-    lat: 31.2482, lng: 121.4872, src: "gcj" },
-
-  /* ---------------- Day 7 · Sat 28 Nov ---------------- */
-  { id: "d7-dexing", day: 7, cat: "food", rn: true,
-    en: "De Xing Guan", zh: "德兴馆(广东路总店)", time: "07:30 · Breakfast",
-    tip: "焖蹄面 / 焖肉面 with Su-style toppings; Michelin-listed. 广东路471号.",
+  { id: "b-platform", day: 0, cat: "walk", en: "Bund viewing platform, entrances 9/11", zh: "外滩观景平台(9号口/11号口)",
+    time: "Night view ~19:30", tip: "Go straight to entrances 9 or 11 to get onto the platform quickly, then walk to the Nanjing Rd end and come down there.",
     metro: "East Nanjing Rd (L2/10)",
-    lat: 31.2345, lng: 121.4820, src: "gcj",
-    warn: "Reports say De Xing Guan also opened on 福建中路; check which branch is open." },
-  { id: "d7-zhuang", day: 7, cat: "food", rn: true,
-    en: "Zhuang's Longxing Crab Dishes", zh: "庄氏隆兴·非遗蟹点(南京东路店)", time: "09:00 · Brunch (alt)",
-    tip: "Crab-meat (蟹粉) dishes, hand-picked in view behind the glass kitchen window.",
+    lat: 31.2405, lng: 121.4872, src: "wgs", warn: "Pin is approximate." },
+  { id: "b-nanjing", day: 0, cat: "walk", en: "Nanjing Rd pedestrian street", zh: "南京路步行街",
+    time: "Dinner ~18:00", tip: "Eat here before the Bund lights come on.",
     metro: "East Nanjing Rd (L2/10)",
-    lat: 31.2378, lng: 121.4845, src: "gcj",
-    warn: "Pin is approximate: search the name in Apple Maps." }
+    lat: 31.2370, lng: 121.4760, src: "wgs" },
+  { id: "c-start", day: 0, cat: "walk", en: "Jiaotong University station, exit 7", zh: "交通大学站7号口",
+    time: "Start of route C", tip: "About 3 minutes' walk to Wukang Mansion.",
+    metro: "Jiaotong University (L10/11)", exit: "Exit 7",
+    lat: 31.2025, lng: 121.4325, src: "wgs", warn: "Pin is approximate." },
+  { id: "wukang", day: 0, cat: "walk", en: "Wukang Mansion", zh: "武康大楼",
+    time: "7–9 AM for photos", tip: "1924 wedge-shaped 'ship's bow' building by László Hudec; shoot it from across the five-way junction.",
+    metro: "Jiaotong University (L10/11)",
+    lat: 31.2062561, lng: 121.4337292, src: "wgs" },
+  { id: "c-ferguson", day: 0, cat: "walk", en: "Ferguson Lane", zh: "武康庭",
+    time: "Daytime", tip: "Courtyard of cafés and galleries at 武康路376号.",
+    metro: "Shanghai Library (L10)",
+    lat: 31.2085, lng: 121.4385, src: "gcj" },
+  { id: "c-romeo", day: 0, cat: "walk", en: "Romeo Balcony", zh: "罗密欧阳台",
+    time: "Daytime", tip: "The much-photographed curved balcony on Wukang Rd.",
+    metro: "Shanghai Library (L10)",
+    lat: 31.2091, lng: 121.4386, src: "gcj", warn: "Pin is approximate." },
+  { id: "c-bajin", day: 0, cat: "walk", en: "Ba Jin's former residence", zh: "巴金故居",
+    time: "Daytime", tip: "The writer Ba Jin's garden villa at 武康路113号.",
+    metro: "Changshu Rd (L1/7)",
+    lat: 31.2125, lng: 121.4405, src: "gcj", warn: "Pin is approximate." },
+  { id: "c-anfu", day: 0, cat: "walk", en: "Anfu Road", zh: "安福路",
+    time: "Afternoon", tip: "Dense small shops by the Shanghai Dramatic Arts Centre; end of route C.",
+    metro: "Changshu Rd (L1/7)",
+    lat: 31.2115, lng: 121.4430, src: "gcj" },
+  { id: "d-madang", day: 0, cat: "walk", en: "Madang Rd station", zh: "马当路站",
+    time: "Start of route D · morning", tip: "Start here for the ginkgo half-day.",
+    metro: "Madang Rd (L9/13)",
+    lat: 31.2116709, lng: 121.4717526, src: "wgs" },
+  { id: "d-liyuan", day: 0, cat: "walk", en: "Liyuan Park", zh: "丽园公园",
+    time: "5:00–21:00", tip: "Small hidden park with several huge ginkgos plus dawn redwoods and red maples. 丽园路565号.",
+    metro: "Madang Rd (L9/13)",
+    lat: 31.2094068, lng: 121.4745217, src: "wgs" },
+  { id: "d-jumen", day: 0, cat: "walk", en: "Jumen Rd ginkgo lane & Bridge 8 terrace", zh: "局门路·8号桥",
+    time: "Morning light", tip: "Ginkgo lane they don't sweep. For the 3F ginkgo terrace: go to 局门路550号, enter the park, right-hand lifts to 3F.",
+    metro: "Madang Rd (L9/13)",
+    lat: 31.2075, lng: 121.4790, src: "wgs", warn: "Pin is approximate: navigate to 局门路550号." },
+  { id: "d-expo", day: 0, cat: "walk", en: "Expo Park", zh: "世博公园",
+    time: "End of route D", tip: "Ginkgos and red maples; the 望江驿12号 ginkgo gate and the 'Monet bridge'. Metro L13 Expo Museum → 1 stop → Expo Avenue.",
+    metro: "Expo Avenue (L8/13)",
+    lat: 31.1892434, lng: 121.4811163, src: "wgs" },
+  { id: "e-yuyuan", day: 0, cat: "walk", en: "Yu Garden", zh: "豫园",
+    time: "Morning, before the crowds", tip: "Ming-dynasty garden with the zigzag bridge and Huxinting teahouse. Start from Yuyuan Garden station exit 7.",
+    metro: "Yuyuan Garden (L10/14)", exit: "Exit 7",
+    lat: 31.2289274, lng: 121.4879752, src: "wgs" },
+  { id: "f-miniso", day: 0, cat: "walk", en: "MINISO LAND (global flagship)", zh: "名创优品IP乐园(全球壹号店)",
+    time: "Daytime", tip: "3 floors of IP collabs: chiikawa, Sanrio, Harry Potter, beauty and lifestyle. 南京东路479号.",
+    metro: "East Nanjing Rd (L2/10)",
+    lat: 31.236025, lng: 121.4800, src: "gcj", warn: "Pin is approximate on Nanjing Rd (E)." },
+  { id: "f-sanrio", day: 0, cat: "walk", en: "Sanrio Gift Gate", zh: "三丽鸥Gift Gate(宏伊国际广场)",
+    time: "Daytime", tip: "Giant Hello Kitty and Shanghai-only xiaolongbao / shengjian plush. 南京东路299号宏伊国际广场1F.",
+    metro: "East Nanjing Rd (L2/10)",
+    lat: 31.2390, lng: 121.4812, src: "wgs", warn: "Pin is approximate." },
+  { id: "f-popmart", day: 0, cat: "walk", en: "POP MART (Nanjing Rd)", zh: "泡泡玛特(南京东路)",
+    time: "Daytime", tip: "Big Dimoo section; Labubu, Twinkle Twinkle and more.",
+    metro: "East Nanjing Rd (L2/10)",
+    lat: 31.2385, lng: 121.4785, src: "wgs", warn: "Address not verified: search 泡泡玛特 南京东路 in Amap." },
+  { id: "f-daimaru", day: 0, cat: "walk", en: "New World Daimaru", zh: "新世界大丸百货",
+    time: "Daytime", tip: "Famous spiral escalators. Your sheet calls it 新世界新丸中心.",
+    metro: "East Nanjing Rd (L2/10)",
+    lat: 31.2397, lng: 121.4830, src: "wgs", warn: "Pin is approximate." },
+  { id: "f-chiikawa", day: 0, cat: "walk", en: "chiikawa flagship (China's first)", zh: "chiikawa官方旗舰店(外滩中央广场)",
+    time: "Daytime", tip: "2 floors, clothes, photo booth and Shanghai-only crab Usagi. 南京东路139号外滩中央广场.",
+    metro: "East Nanjing Rd (L2/10)",
+    lat: 31.2403, lng: 121.4843, src: "wgs", warn: "Pin is approximate." },
+  { id: "f-peace", day: 0, cat: "walk", en: "Peace Hotel & the Bund", zh: "和平饭店",
+    time: "19:00 Bund lights", tip: "Art Deco landmark at the Bund end of Nanjing Rd; step outside for the building lights at 19:00.",
+    metro: "East Nanjing Rd (L2/10)",
+    lat: 31.2411331, lng: 121.4846079, src: "wgs" },
+  { id: "f-hotpot", day: 0, cat: "food", en: "Yu Nan Nan Shanghai Hotpot + Shiku Cookies", zh: "渝囡囡·沪式火锅(外滩店)",
+    time: "Dinner (end of route F)", tip: "Shanghai-style hotpot with lots of crab dishes and a 腌笃鲜 broth; 石库制饼 next door for stretchy soft cookies (strawberry cheese is the post's favourite).",
+    metro: "East Nanjing Rd (L2/10)",
+    lat: 31.2380, lng: 121.4862, src: "wgs", warn: "Pin is approximate on Jiujiang Rd near the Bund." },
+  { id: "g-style2", day: 0, cat: "walk", en: "Xintiandi Style II", zh: "新天地时尚二期",
+    time: "Start of route G", tip: "Exit 6 of 一大会址·新天地 station, then cross the road. AMAM bakery, PAOPAO, apM CUBE K-street (B2), LOOKNOW Jellycat.",
+    metro: "一大会址·新天地 (L13)", exit: "Exit 6",
+    lat: 31.2150, lng: 121.4745, src: "gcj", warn: "Pin is approximate." },
+  { id: "g-style1", day: 0, cat: "walk", en: "Xintiandi Style I", zh: "新天地时尚一期",
+    time: "Daytime", tip: "HARMAY sample shop, GENTLE MONSTER, 13DE MARZO teddy café, food court.",
+    metro: "Xintiandi (L10/13)",
+    lat: 31.2170, lng: 121.4748, src: "gcj", warn: "Pin is approximate." },
+  { id: "g-north", day: 0, cat: "walk", en: "Xintiandi North (shikumen lanes)", zh: "新天地北里",
+    time: "Daytime", tip: "Shikumen lanes with restaurants and bars: IL TEATRO, LE LABO.",
+    metro: "Xintiandi (L10/13)",
+    lat: 31.2205, lng: 121.4745, src: "gcj" },
+  { id: "g-plaza", day: 0, cat: "walk", en: "Xintiandi Plaza", zh: "新天地广场",
+    time: "Food on B1/B2", tip: "Mall that's mostly food: 火烧云, 胡恰 and lots more on B1/B2.",
+    metro: "South Huangpi Rd (L1)",
+    lat: 31.2222, lng: 121.4757, src: "gcj", warn: "Pin is approximate." },
+  { id: "g-k11", day: 0, cat: "walk", en: "K11 Art Mall", zh: "K11购物艺术中心",
+    time: "Daytime", tip: "POP MART, CASETiFY; art museum on B3.",
+    metro: "South Huangpi Rd (L1)",
+    lat: 31.2228, lng: 121.4780, src: "gcj", warn: "Pin is approximate." },
+  { id: "g-huangpi", day: 0, cat: "walk", en: "South Huangpi Rd station", zh: "黄陂南路站",
+    time: "End of route G", tip: "Take the metro home from here.",
+    metro: "South Huangpi Rd (L1)",
+    lat: 31.2228, lng: 121.4732, src: "gcj", warn: "Pin is approximate." }
 ];
+
+// Link each walk stop to the routes it belongs to, with its step number.
+Object.entries(ROUTES).forEach(([letter, r]) => r.stops.forEach((id, i) => {
+  const s = STOPS.find(x => x.id === id);
+  (s.routes = s.routes || []).push({ letter, step: i + 1, of: r.stops.length });
+}));
 
 /* =====================================================================
    GCJ-02 <-> WGS-84 conversion (standard Krasovsky ellipsoid formula)
@@ -775,51 +771,40 @@ function gcjToWgs(lat, lng) {
 /* Street addresses (from the sources found during research) for "Copy address". */
 const ADDR = {
   "hotel": "上海市杨浦区江浦路518号",
-  "d1-egg": "上海市黄浦区定兴路6号",
-  "d1-dahuchun": "上海市黄浦区四川中路136号",
-  "d1-xinya": "上海市黄浦区南京东路719号",
-  "d2-wukang": "上海市徐汇区淮海中路1850号",
-  "d2-ops": "上海市徐汇区太原路177弄1号",
-  "d2-sunflour": "上海市徐汇区安福路308号",
-  "d2-ferguson": "上海市徐汇区武康路376号",
-  "d2-icy": "上海市徐汇区乌鲁木齐中路276号",
-  "d2-kooriya": "上海市徐汇区常熟路185号",
-  "d2-jesse": "上海市徐汇区天平路41号",
-  "d4-gmc": "上海市黄浦区淮海中路588号",
-  "d4-volcan": "上海市徐汇区永康路80号",
-  "d4-eau": "上海市徐汇区永康路85号",
-  "d4-dtx": "上海市黄浦区陕西南路309号",
-  "d4-hdl": "上海市黄浦区打浦路1号金玉兰广场",
-  "d4-daiban": "上海市黄浦区徐家汇路618号日月光中心4楼",
-  "d5-jingan": "上海市静安区南京西路1686号",
-  "d5-huxi": "上海市静安区北京西路1738号",
-  "d5-heytea": "上海市静安区茂名北路259号101室",
-  "d5-butter": "上海市静安区吴江路289号",
-  "d5-laoju": "上海市黄浦区广西北路470弄",
-  "d5-park": "上海市黄浦区南京西路170号",
-  "d5-deda": "上海市黄浦区南京西路473号",
-  "d6-wsz": "上海市虹口区山阴路123号",
-  "d6-1933": "上海市虹口区沙泾路10号",
-  "d6-hanghai": "上海市虹口区东大名路470号",
-  "d6-manner": "上海市虹口区东长治路588号",
-  "d7-dexing": "上海市黄浦区广东路471号"
+  "m-daiban": "上海市黄浦区徐家汇路618号日月光中心4楼",
+  "m-lamb": "上海市浦东新区银城路155号光音广场B1层",
+  "m-haidilao": "上海市黄浦区打浦路1号金玉兰广场4层",
+  "m-guangming": "上海市黄浦区淮海中路588号",
+  "m-xiandelai": "上海市黄浦区宁海东路290号",
+  "m-dahuchun": "上海市黄浦区四川中路136号",
+  "m-yuxingji": "上海市黄浦区九江路686号腾飞元创大厦1层108室",
+  "m-shucaiji": "上海市黄浦区浙江中路120号",
+  "m-gulooo": "上海市黄浦区淮海中路282号香港广场北座B1-02C",
+  "m-chenglong": "上海市黄浦区九江路216号",
+  "s-heytea": "上海市静安区茂名北路259号101室",
+  "s-taibenniu": "上海市长宁区金钟路788号上海荟聚B2",
+  "s-butter": "上海市静安区吴江路289号",
+  "s-kooriya": "上海市徐汇区常熟路185号",
+  "s-eau": "上海市徐汇区永康路85号",
+  "s-icy": "上海市徐汇区乌鲁木齐中路276号",
+  "c-ferguson": "上海市徐汇区武康路376号",
+  "c-bajin": "上海市徐汇区武康路113号",
+  "wukang": "上海市徐汇区淮海中路1850号",
+  "d-liyuan": "上海市黄浦区丽园路565号",
+  "d-jumen": "上海市黄浦区局门路550号",
+  "f-miniso": "上海市黄浦区南京东路479号",
+  "f-sanrio": "上海市黄浦区南京东路299号宏伊国际广场1层",
+  "f-chiikawa": "上海市黄浦区南京东路139号外滩中央广场"
 };
 
 /* What to paste into a map app's search box when the display name is not searchable as-is. */
 const QUERY = {
-  "d1-shanxi": "小绍兴 山西南路",
-  "d1-dongchang": "东昌路站",
-  "d2-ops": "OPS咖啡 太原路",
-  "d2-hengshan": "衡山路",
-  "d2-ferguson": "武康庭",
-  "d2-panyu": "上生新所",
-  "d2-kooriya": "鲨鱼冰屋 常熟路",
-  "d4-volcan": "Café del Volcán 永康路",
-  "d4-eau": "EAU Cafe 永康路",
-  "d4-sinan": "思南公馆",
-  "d4-xtd": "屋里厢石库门博物馆",
-  "d5-butter": "BUTTERFUL&CREAMOROUS 吴江路",
-  "d6-gongping": "公平路轮渡站"
+  "a-garden": "时空花园 江西中路",
+  "a-bund": "外滩",
+  "b-platform": "外滩观景平台",
+  "d-jumen": "8号桥 局门路",
+  "f-hotpot": "渝囡囡沪式火锅 外滩店",
+  "s-ahma": "阿嬷手作 迪士尼小镇"
 };
 
 const ALL = [HOTEL, ...STOPS];
@@ -837,7 +822,7 @@ ALL.forEach(s => {
 /* =====================================================================
    STATE
    ===================================================================== */
-const state = { day: "all", cat: "all", me: null };
+const state = { day: "all", cat: "all", route: "all", me: null };
 
 /* =====================================================================
    MAP
@@ -858,13 +843,20 @@ const gaodeSat = L.tileLayer("https://webst0{s}.is.autonavi.com/appmaptile?style
 L.control.zoom({ position: "topright" }).addTo(map);
 L.control.layers({ "高德 中文": gaodeZh, "Gaode English": gaodeEn, "高德 卫星 Satellite": gaodeSat }, null, { position: "topright" }).addTo(map);
 
-const EMOJI = { photo: "📷", food: "🍜", hotel: "🏨" };
-const LABEL = { photo: "📷 Photo", food: "🍜 Food", hotel: "🏨 Hotel" };
+const EMOJI = { walk: "🚶", food: "🍜", sweet: "🧋", hotel: "🏨", travel: "✈️" };
+const LABEL = { walk: "🚶 Walk & sights", food: "🍜 Meal", sweet: "🧋 Sweets", hotel: "🏨 Hotel", travel: "✈️ Airport" };
+// Short day label for lists: "D3", "D1 & D8" or "Anytime".
+function dayShort(s) {
+  if (!s.day) return "Anytime";
+  return s.alsoDay ? `D${s.day} & D${s.alsoDay}` : `D${s.day}`;
+}
 
 function makeIcon(s) {
   return L.divIcon({
     className: "pin-wrap",
-    html: `<div class="pin ${s.cat}"><span>${EMOJI[s.cat]}</span></div>`,
+    html: s.routes
+      ? `<div class="pin ${s.cat}"><span class="letter">${s.routes.map(r => r.letter).join("")}</span></div>`
+      : `<div class="pin ${s.cat}"><span>${s.id === "disney" ? "🏰" : EMOJI[s.cat]}</span></div>`,
     iconSize: [30, 30], iconAnchor: [15, 30], popupAnchor: [0, -30]
   });
 }
@@ -903,10 +895,11 @@ function popupEl(s) {
       <a class="btn amap" href="${amap}" target="_blank" rel="noopener">高德 Amap</a>
     </div>
     <div class="why"><b>⭐ Why go</b>${esc(s.tip)}</div>
+    ${(s.routes || []).map(r => `<details class="route"><summary>🚶 Route ${r.letter} · stop ${r.step} of ${r.of}: ${esc(ROUTES[r.letter].name)}</summary><p>${esc(ROUTES[r.letter].how)}</p></details>`).join("")}
     ${d !== null ? `<div class="row dist">📏 ${fmtDist(d)} from you · ~${walkMins(d)} min walk</div>` : ""}
     ${s.addr ? `<div class="row">📍 ${esc(s.addr)}</div>` : ""}
     <div class="row">🚇 ${esc(s.metro)}${s.exit ? " · " + esc(s.exit) : ""}</div>
-    ${day ? `<div class="row">🗓️ Day ${day.n} · ${esc(day.date)}</div>` : ""}
+    <div class="row">🗓️ ${day ? `Day ${day.n} · ${esc(day.date)}` : "Anytime (not scheduled yet)"}${s.alsoDay ? ` and Day ${s.alsoDay}` : ""}</div>
     ${s.warn ? `<div class="warn">⚠️ ${esc(s.warn)}</div>` : ""}`;
   el.querySelectorAll("[data-copy]").forEach(b => b.addEventListener("click", e => {
     L.DomEvent.stop(e);
@@ -1036,7 +1029,26 @@ document.getElementById("sheetClose").addEventListener("click", closeSheet);
    ===================================================================== */
 function isVisible(s) {
   if (s.cat === "hotel") return true;
-  return (state.day === "all" || s.day === state.day) && (state.cat === "all" || s.cat === state.cat);
+  const dayOk = state.day === "all" || s.day === state.day || s.alsoDay === state.day;
+  const catOk = state.cat === "all" || s.cat === state.cat;
+  const routeOk = state.cat !== "walk" || state.route === "all" || (s.routes || []).some(r => r.letter === state.route);
+  return dayOk && catOk && routeOk;
+}
+
+/* Dashed lines joining each city walk's stops in order (drawn locally, no routing service). */
+const routeLines = {};
+Object.entries(ROUTES).forEach(([letter, r]) => {
+  const pts = r.stops.map(id => { const p = byId[id].pos || byId[id].wgs; return [p.lat, p.lng]; });
+  routeLines[letter] = L.polyline(pts, { color: "#2563eb", weight: 3, opacity: 0.75, dashArray: "6 8", interactive: false });
+});
+function updateRouteLines() {
+  Object.entries(routeLines).forEach(([letter, line]) => {
+    const show = (state.cat === "all" || state.cat === "walk") &&
+      (state.route === "all" || state.route === letter || state.cat !== "walk") &&
+      ROUTES[letter].stops.some(id => isVisible(byId[id]));
+    if (show && !map.hasLayer(line)) line.addTo(map);
+    if (!show && map.hasLayer(line)) map.removeLayer(line);
+  });
 }
 
 function applyFilters(fit) {
@@ -1053,7 +1065,8 @@ function applyFilters(fit) {
   });
   renderChips();
   renderDayInfo(shown);
-  if (fit) fitTo(shown.filter(s => state.day !== "all" || s.day !== 3));
+  updateRouteLines();
+  if (fit) fitTo(shown.filter(s => state.day !== "all" || !s.far));
   renderNearby();
 }
 
@@ -1074,7 +1087,7 @@ function renderChips() {
   const dayWrap = document.getElementById("dayChips");
   dayWrap.innerHTML = "";
   [{ key: "all", label: "All Days", sub: "21–28 Nov" }]
-    .concat(DAYS.map(d => ({ key: d.n, label: `Day ${d.n}`, sub: d.date })))
+    .concat(DAYS.map(d => ({ key: d.n, label: `Day ${d.n}`, sub: d.date })), [{ key: 0, label: "Anytime", sub: "not scheduled" }])
     .forEach(o => {
       const b = document.createElement("button");
       b.className = "chip" + (state.day === o.key ? " active" : "");
@@ -1087,31 +1100,53 @@ function renderChips() {
 
   const catWrap = document.getElementById("catChips");
   catWrap.innerHTML = "";
-  [{ key: "all", label: "All" }, { key: "photo", label: "📷 Photo" }, { key: "food", label: "🍜 Food" }]
+  [{ key: "all", label: "All" }, { key: "walk", label: "🚶 City walks" }, { key: "food", label: "🍜 Meals" }, { key: "sweet", label: "🧋 Sweets" }]
     .forEach(o => {
       const b = document.createElement("button");
       b.className = "chip" + (state.cat === o.key ? " active" : "");
       b.type = "button";
       b.setAttribute("aria-pressed", String(state.cat === o.key));
       b.textContent = o.label;
-      b.addEventListener("click", () => { state.cat = o.key; applyFilters(true); });
+      b.addEventListener("click", () => { state.cat = o.key; state.route = "all"; applyFilters(true); });
       catWrap.appendChild(b);
     });
+
+  // Route chips appear only when "City walks" is selected.
+  const routeWrap = document.getElementById("routeChips");
+  routeWrap.innerHTML = "";
+  routeWrap.hidden = state.cat !== "walk";
+  if (state.cat === "walk") {
+    [{ key: "all", label: "All routes" }].concat(Object.entries(ROUTES).map(([k, r]) => ({ key: k, label: `${k} · ${r.name}` })))
+      .forEach(o => {
+        const b = document.createElement("button");
+        b.className = "chip" + (state.route === o.key ? " active" : "");
+        b.type = "button";
+        b.setAttribute("aria-pressed", String(state.route === o.key));
+        b.textContent = o.label;
+        b.addEventListener("click", () => { state.route = o.key; applyFilters(true); });
+        routeWrap.appendChild(b);
+      });
+  }
   markOverflowingChips();
 }
 
 function renderDayInfo(shown) {
   const box = document.getElementById("dayInfo");
   const dd = DAYS.find(x => x.n === state.day);
-  const catLabel = { all: "All spots", photo: "📷 Photo", food: "🍜 Food" }[state.cat];
-  document.getElementById("tbSummary").textContent =
-    `${dd ? `Day ${dd.n} · ${dd.date}` : "All days"} · ${catLabel} ▾`;
+  const catLabel = { all: "All spots", walk: "🚶 Walks", food: "🍜 Meals", sweet: "🧋 Sweets" }[state.cat];
+  const dayLabel = dd ? `Day ${dd.n} · ${dd.date}` : state.day === 0 ? "Anytime" : "All days";
+  const routeLabel = state.cat === "walk" && state.route !== "all" ? ` ${state.route}` : "";
+  document.getElementById("tbSummary").textContent = `${dayLabel} · ${catLabel}${routeLabel} ▾`;
   if (state.day === "all") {
-    box.innerHTML = `<b>${shown.length} spots</b> across 7 days · tap a pin for details`;
-    return;
+    box.innerHTML = `<b>${shown.length} spots</b> · 21–28 Nov · tap a pin for details`;
+  } else if (state.day === 0) {
+    box.innerHTML = `<b>Not scheduled yet</b> · ${shown.length} spots to fit into your free days`;
+  } else {
+    box.innerHTML = `<b>${esc(dd.title)}</b> · ${shown.length} spots · ${esc(dd.date)}`;
   }
-  const d = DAYS.find(x => x.n === state.day);
-  box.innerHTML = `<b>${esc(d.title)}</b> · ${shown.length} spots · ${esc(d.date)}`;
+  if (state.cat === "walk" && state.route !== "all") {
+    box.innerHTML += `<br>🚶 ${esc(ROUTES[state.route].how)}`;
+  }
 }
 
 /* =====================================================================
@@ -1139,7 +1174,7 @@ function renderNearby() {
     const li = document.createElement("li");
     li.innerHTML = `
       <span class="nl-dot" style="background:var(--${s.cat})">${EMOJI[s.cat]}</span>
-      <button class="nl-name" type="button"><div>${esc(s.en)}</div><small>${esc(s.zh)} · D${s.day}</small></button>
+      <button class="nl-name" type="button"><div>${esc(s.en)}</div><small>${esc(s.zh)} · ${dayShort(s)}${s.routes ? " · Route " + s.routes.map(r => r.letter).join("/") : ""}</small></button>
       <span class="nl-dist">${fmtDist(d)}${state.me ? `<small>~${walkMins(d)} min</small>` : ""}</span>
       <button class="nl-copy" type="button" aria-label="Copy Chinese name">📋</button>`;
     li.querySelector(".nl-name").addEventListener("click", () => selectSpot(s));
